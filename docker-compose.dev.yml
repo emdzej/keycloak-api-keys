@@ -26,7 +26,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
     volumes:
-      - ./spi/build/libs/spi-0.1.0-SNAPSHOT-all.jar:/opt/keycloak/providers/api-keys.jar:ro
+      - ./spi/build/libs/keycloak-api-keys-all.jar:/opt/keycloak/providers/api-keys.jar:ro
     ports:
       - "8080:8080"
       - "9000:9000"
