@@ -36,7 +36,7 @@ public class AccountApiKeyResource {
     @GET
     public List<ApiKeyResponse> list() {
         AuthResult auth = authenticate();
-        return apiKeyService.listUserKeys(session.getContext().getRealm(), auth.getUser())
+        return apiKeyService.listUserKeys(session.getContext().getRealm(), auth.user())
             .stream()
             .map(AccountApiKeyResource::toResponse)
             .collect(Collectors.toList());
@@ -45,7 +45,7 @@ public class AccountApiKeyResource {
     @POST
     public Response create(ApiKeyCreateRequest request) {
         AuthResult auth = authenticate();
-        ApiKeyService.CreatedApiKey created = apiKeyService.createUserKey(session.getContext().getRealm(), auth.getUser(), request, auth.getUser());
+        ApiKeyService.CreatedApiKey created = apiKeyService.createUserKey(session.getContext().getRealm(), auth.user(), request, auth.user());
         ApiKeyCreatedResponse response = toCreatedResponse(created);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
@@ -54,7 +54,7 @@ public class AccountApiKeyResource {
     @Path("{keyId}")
     public Response revoke(@PathParam("keyId") String keyId) {
         AuthResult auth = authenticate();
-        apiKeyService.revokeUserKey(session.getContext().getRealm(), auth.getUser(), keyId, auth.getUser());
+        apiKeyService.revokeUserKey(session.getContext().getRealm(), auth.user(), keyId, auth.user());
         return Response.noContent().build();
     }
 
