@@ -1,16 +1,13 @@
 ## Summary
-Implemented Admin REST API endpoints for Keycloak API Keys extension.
+Adds the custom OAuth2 grant type for exchanging API keys into JWT access tokens.
 
-- Added `AdminApiKeyResource`, `AdminApiKeyResourceProvider`, and factory.
-- Added `AdminAuth` helper for role-based authorization (`view-api-keys`, `manage-api-keys`).
-- Extended `ApiKeyService` with `findByRealm` (filtering), `findById`, `createForUser`, `getStats`, `revokeKey`.
-- Added DTOs `AdminApiKeyResponse` (includes `userId`) and `ApiKeyStatsResponse`.
-- Registered `RealmResourceProvider` with ID `api-keys`.
+## Changes
+- Implemented `ApiKeyGrantType` + factory for `urn:ietf:params:oauth:grant-type:api-key`.
+- Validates API key status, client match, and user state.
+- Builds tokens with restricted roles/scopes and `api_key_id` claim.
+- Updates API key usage metadata (last used, IP, usage count).
+- Registered grant type SPI and added entity/service helpers.
 
-Endpoints implemented:
-- `GET /realms/{realm}/api-keys`: List keys with filters (userId, clientId, status).
-- `GET /realms/{realm}/api-keys/{keyId}/stats`: Get key statistics.
-- `POST /realms/{realm}/api-keys/users/{userId}`: Create key for specific user.
-- `DELETE /realms/{realm}/api-keys/{keyId}`: Revoke key.
-
-Note: The endpoints are mounted under `/realms/{realm}/api-keys` due to `RealmResourceProvider` mechanism. The Admin functionality is secured via role checks.
+## Notes
+- Roles are limited to the intersection of user roles and API key roles.
+- Scope response and token scope are limited to the intersection of client scopes and API key scopes.

@@ -109,6 +109,14 @@ public class ApiKeyService {
         return null;
     }
 
+    public ApiKeyEntity findByKeyHash(String keyHash) {
+        return repository.findByKeyHash(keyHash);
+    }
+
+    public ApiKeyEntity save(ApiKeyEntity entity) {
+        return repository.save(entity);
+    }
+
     public ApiKeyEntity getStats(RealmModel realm, String id) {
         return findById(realm, id);
     }
