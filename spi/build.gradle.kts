@@ -29,6 +29,7 @@ dependencies {
     implementation("com.google.guava:guava:33.0.0-jre")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("com.github.dasniko:testcontainers-keycloak:$testcontainersKeycloakVersion")
 }
 
