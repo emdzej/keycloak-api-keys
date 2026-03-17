@@ -43,7 +43,7 @@ public class AdminAuth {
     }
 
     private boolean hasRole(String roleName) {
-        UserModel user = auth.getUser();
+        UserModel user = auth.user();
         ClientModel realmManagement = realm.getClientByClientId("realm-management");
         if (realmManagement == null) {
             return false;
@@ -53,6 +53,6 @@ public class AdminAuth {
     }
 
     public UserModel getUser() {
-        return auth.getUser();
+        return auth.user();
     }
 }
