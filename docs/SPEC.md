@@ -66,14 +66,18 @@ ApiKey {
 
 ```
 Format: {prefix}_{randomBytes}
-Example: mk_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
+Example: myapp_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 
 Components:
-- prefix: Configurable per realm (default: "kc")
+- prefix: Configurable per client (default: client_id shortened)
 - separator: underscore
 - random: 64 characters (base62: a-z, A-Z, 0-9)
 
 Total length: prefix + 1 + 64 = ~70 characters
+
+Prefix examples:
+- Client "my-awesome-app" → prefix "myapp" or custom "maa_prod"
+- Client "billing-service" → prefix "billing" or custom "bs_live"
 ```
 
 ### 2.3 Storage
@@ -430,7 +434,6 @@ Realm Settings → API Keys:
 {
   "apiKeys": {
     "enabled": true,
-    "keyPrefix": "mk",
     "defaultExpiration": "P1Y",
     "maxKeysPerUser": 10,
     "rateLimits": {
@@ -447,6 +450,7 @@ Realm Settings → API Keys:
 ```json
 {
   "apiKeysEnabled": true,
+  "apiKeysPrefix": "myapp_live",
   "apiKeysRateLimits": {
     "perMinute": 100
   }
