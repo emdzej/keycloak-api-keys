@@ -10,29 +10,37 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.keycloak.events.EventBuilder;
+import org.keycloak.events.EventType;
 import org.keycloak.connections.jpa.JpaConnectionProvider;
 import org.keycloak.models.ClientModel;
-import org.keycloak.models.ClientScopeModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserModel;
+import pl.emdzej.keycloak.apikeys.events.ApiKeyCreatedEvent;
+import pl.emdzej.keycloak.apikeys.events.ApiKeyRevokedEvent;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreateRequest;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyRepository;
 import pl.emdzej.keycloak.apikeys.jpa.JpaApiKeyRepository;
+import pl.emdzej.keycloak.apikeys.metrics.ApiKeyMetrics;
+import pl.emdzej.keycloak.apikeys.metrics.ApiKeyMetricsProvider;
 
 public class ApiKeyService {
     private static final int MAX_PREFIX_LENGTH = 15;
 
     private final KeycloakSession session;
     private final ApiKeyRepository repository;
+    private final ApiKeyMetrics metrics;
 
     public ApiKeyService(KeycloakSession session) {
         this.session = session;
         this.repository = new JpaApiKeyRepository(
             session.getProvider(JpaConnectionProvider.class).getEntityManager()
         );
+        ApiKeyMetricsProvider metricsProvider = session.getProvider(ApiKeyMetricsProvider.class);
+        this.metrics = metricsProvider != null ? metricsProvider.getMetrics() : null;
     }
 
     public List<ApiKeyEntity> listUserKeys(RealmModel realm, UserModel user) {
@@ -42,7 +50,7 @@ public class ApiKeyService {
             .toList();
     }
 
-    public CreatedApiKey createUserKey(RealmModel realm, UserModel user, ApiKeyCreateRequest request) {
+    public CreatedApiKey createUserKey(RealmModel realm, UserModel user, ApiKeyCreateRequest request, UserModel createdBy) {
         if (request == null) {
             throw new BadRequestException("Request body is required");
         }
@@ -87,11 +95,21 @@ public class ApiKeyService {
         );
 
         ApiKeyEntity saved = repository.save(entity);
+        updateKeyCounts(realm, saved.getClientId());
+        publishCreatedEvent(realm, saved, createdBy);
         return new CreatedApiKey(saved, generatedKey.plainKey());
     }
 
+    public CreatedApiKey createUserKey(RealmModel realm, UserModel user, ApiKeyCreateRequest request) {
+        return createUserKey(realm, user, request, user);
+    }
+
+    public CreatedApiKey createForUser(RealmModel realm, UserModel user, ApiKeyCreateRequest request, UserModel createdBy) {
+        return createUserKey(realm, user, request, createdBy);
+    }
+
     public CreatedApiKey createForUser(RealmModel realm, UserModel user, ApiKeyCreateRequest request) {
-        return createUserKey(realm, user, request);
+        return createUserKey(realm, user, request, user);
     }
 
     public List<ApiKeyEntity> findByRealm(RealmModel realm, String userId, String clientId, Boolean active) {
@@ -122,17 +140,23 @@ public class ApiKeyService {
         return findById(realm, id);
     }
 
-    public void revokeKey(RealmModel realm, String keyId) {
+    public void revokeKey(RealmModel realm, String keyId, UserModel revokedBy) {
         requireNotBlank(keyId, "keyId is required");
         ApiKeyEntity entity = findById(realm, keyId);
         if (entity == null) {
             throw new NotFoundException("API key not found");
         }
         entity.setRevokedAt(Instant.now());
-        repository.save(entity);
+        ApiKeyEntity saved = repository.save(entity);
+        updateKeyCounts(realm, saved.getClientId());
+        publishRevokedEvent(realm, saved, revokedBy);
     }
 
-    public void revokeUserKey(RealmModel realm, UserModel user, String keyId) {
+    public void revokeKey(RealmModel realm, String keyId) {
+        revokeKey(realm, keyId, null);
+    }
+
+    public void revokeUserKey(RealmModel realm, UserModel user, String keyId, UserModel revokedBy) {
         requireNotBlank(keyId, "keyId is required");
 
         ApiKeyEntity entity = repository.findById(keyId);
@@ -143,7 +167,81 @@ public class ApiKeyService {
             throw new ForbiddenException("API key does not belong to user");
         }
         entity.setRevokedAt(Instant.now());
-        repository.save(entity);
+        ApiKeyEntity saved = repository.save(entity);
+        updateKeyCounts(realm, saved.getClientId());
+        publishRevokedEvent(realm, saved, revokedBy);
+    }
+
+    public void revokeUserKey(RealmModel realm, UserModel user, String keyId) {
+        revokeUserKey(realm, user, keyId, user);
+    }
+
+    public long countAll() {
+        RealmModel realm = session.getContext().getRealm();
+        if (realm == null) {
+            return 0L;
+        }
+        return repository.findByRealm(realm.getId()).size();
+    }
+
+    private void updateKeyCounts(RealmModel realm, String clientId) {
+        if (metrics == null) {
+            return;
+        }
+        Instant now = Instant.now();
+        List<ApiKeyEntity> keys = repository.findByClientId(realm.getId(), clientId);
+        long revoked = keys.stream().filter(key -> key.getRevokedAt() != null).count();
+        long expired = keys.stream()
+            .filter(key -> key.getRevokedAt() == null)
+            .filter(key -> key.getExpiresAt() != null && key.getExpiresAt().isBefore(now))
+            .count();
+        long active = keys.size() - revoked - expired;
+
+        metrics.updateKeyCount(realm.getName(), clientId, "active", active);
+        metrics.updateKeyCount(realm.getName(), clientId, "revoked", revoked);
+        metrics.updateKeyCount(realm.getName(), clientId, "expired", expired);
+    }
+
+    private void publishCreatedEvent(RealmModel realm, ApiKeyEntity entity, UserModel createdBy) {
+        String actorId = createdBy != null ? createdBy.getId() : null;
+        session.getKeycloakSessionFactory().publish(new ApiKeyCreatedEvent(
+            realm.getId(),
+            entity.getUserId(),
+            entity.getClientId(),
+            entity.getId(),
+            actorId
+        ));
+
+        EventBuilder event = new EventBuilder(realm, session, session.getContext().getConnection())
+            .event(EventType.UPDATE_CREDENTIAL)
+            .client(entity.getClientId())
+            .user(entity.getUserId())
+            .detail("api_key_event", "API_KEY_CREATED")
+            .detail("api_key_id", entity.getId())
+            .detail("client_id", entity.getClientId())
+            .detail("created_by", actorId);
+        event.success();
+    }
+
+    private void publishRevokedEvent(RealmModel realm, ApiKeyEntity entity, UserModel revokedBy) {
+        String actorId = revokedBy != null ? revokedBy.getId() : null;
+        session.getKeycloakSessionFactory().publish(new ApiKeyRevokedEvent(
+            realm.getId(),
+            entity.getUserId(),
+            entity.getClientId(),
+            entity.getId(),
+            actorId
+        ));
+
+        EventBuilder event = new EventBuilder(realm, session, session.getContext().getConnection())
+            .event(EventType.UPDATE_CREDENTIAL)
+            .client(entity.getClientId())
+            .user(entity.getUserId())
+            .detail("api_key_event", "API_KEY_REVOKED")
+            .detail("api_key_id", entity.getId())
+            .detail("client_id", entity.getClientId())
+            .detail("revoked_by", actorId);
+        event.success();
     }
 
     private static Set<String> validateRoles(RealmModel realm,

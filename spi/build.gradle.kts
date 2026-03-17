@@ -14,6 +14,7 @@ dependencies {
     compileOnly("org.keycloak:keycloak-server-spi:26.0.0")
     compileOnly("org.keycloak:keycloak-server-spi-private:26.0.0")
     compileOnly("org.keycloak:keycloak-services:26.0.0")
+    compileOnly("io.micrometer:micrometer-core:1.14.0")
     compileOnly("jakarta.persistence:jakarta.persistence-api:3.1.0")
     compileOnly("org.projectlombok:lombok:1.18.32")
     annotationProcessor("org.projectlombok:lombok:1.18.32")

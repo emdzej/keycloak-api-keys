@@ -8,4 +8,6 @@ public interface RateLimiter {
     RateLimitInfo getInfo(String keyId);
 
     void reset(String keyId);
+
+    boolean isHealthy();
 }

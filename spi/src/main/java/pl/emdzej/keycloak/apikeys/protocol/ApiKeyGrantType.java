@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OAuthErrorException;
@@ -32,7 +33,12 @@ import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.RootAuthenticationSessionModel;
 import pl.emdzej.keycloak.apikeys.ApiKeyHasher;
 import pl.emdzej.keycloak.apikeys.ApiKeyService;
+import pl.emdzej.keycloak.apikeys.events.ApiKeyExchangedEvent;
+import pl.emdzej.keycloak.apikeys.events.ApiKeyExpiredRejectedEvent;
+import pl.emdzej.keycloak.apikeys.events.ApiKeyRateLimitedEvent;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
+import pl.emdzej.keycloak.apikeys.metrics.ApiKeyMetrics;
+import pl.emdzej.keycloak.apikeys.metrics.ApiKeyMetricsProvider;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimitConfig;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimitConfigResolver;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimitInfo;
@@ -49,39 +55,60 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         setContext(context);
         event.detail(Details.AUTH_METHOD, "api_key");
 
+        ApiKeyMetrics metrics = resolveMetrics();
+        long startNanos = System.nanoTime();
+
         String apiKeyValue = formParams.getFirst("api_key");
+        String clientIdParam = formParams.getFirst(OAuth2Constants.CLIENT_ID);
+
         if (apiKeyValue == null || apiKeyValue.isBlank()) {
+            recordExchange(metrics, clientIdParam, "invalid", startNanos);
             throw invalidGrant("Invalid API key");
         }
 
         ApiKeyService apiKeyService = new ApiKeyService(session);
         ApiKeyEntity apiKey = apiKeyService.findByKeyHash(ApiKeyHasher.hash(apiKeyValue));
         if (apiKey == null) {
+            recordExchange(metrics, clientIdParam, "invalid", startNanos);
             throw invalidGrant("Invalid API key");
         }
         if (!Objects.equals(apiKey.getRealmId(), realm.getId())) {
+            recordExchange(metrics, clientIdParam, "invalid", startNanos);
             throw invalidGrant("Invalid API key");
         }
         if (apiKey.getRevokedAt() != null) {
+            recordExchange(metrics, apiKey.getClientId(), "revoked", startNanos);
             throw invalidGrant("API key revoked");
         }
         if (apiKey.getExpiresAt() != null && apiKey.getExpiresAt().isBefore(Instant.now())) {
+            recordExchange(metrics, apiKey.getClientId(), "expired", startNanos);
+            event.detail("api_key_event", "API_KEY_EXPIRED_REJECTED")
+                .detail("api_key_id", apiKey.getId());
+            session.getKeycloakSessionFactory().publish(new ApiKeyExpiredRejectedEvent(
+                realm.getId(),
+                apiKey.getUserId(),
+                apiKey.getClientId(),
+                apiKey.getId()
+            ));
             throw invalidGrant("API key expired");
         }
 
-        String clientIdParam = formParams.getFirst(OAuth2Constants.CLIENT_ID);
         if (clientIdParam != null && !clientIdParam.equals(apiKey.getClientId())) {
+            recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
             throw invalidClient("Client ID does not match API key");
         }
         if (client == null || !client.getClientId().equals(apiKey.getClientId())) {
+            recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
             throw invalidClient("Client ID does not match API key");
         }
 
         UserModel user = session.users().getUserById(realm, apiKey.getUserId());
         if (user == null) {
+            recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
             throw invalidGrant("Invalid API key");
         }
         if (!user.isEnabled()) {
+            recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
             throw invalidGrant("User disabled");
         }
 
@@ -92,10 +119,25 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         RateLimiterProvider provider = session.getProvider(RateLimiterProvider.class);
         RateLimiter rateLimiter = provider != null ? provider.getRateLimiter() : null;
         if (rateLimiter == null) {
+            recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
             throw invalidGrant("Rate limiter unavailable");
         }
         rateLimiter.updateConfig(apiKey.getId(), rateLimitConfig);
         if (!rateLimiter.tryAcquire(apiKey.getId())) {
+            recordExchange(metrics, apiKey.getClientId(), "rate_limited", startNanos);
+            recordRateLimited(metrics, apiKey.getClientId());
+
+            event.detail("api_key_event", "API_KEY_RATE_LIMITED")
+                .detail("api_key_id", apiKey.getId());
+            event.error(Errors.ACCESS_DENIED);
+            session.getKeycloakSessionFactory().publish(new ApiKeyRateLimitedEvent(
+                realm.getId(),
+                apiKey.getUserId(),
+                apiKey.getClientId(),
+                apiKey.getId(),
+                rateLimitConfig.perMinute()
+            ));
+
             RateLimitInfo info = rateLimiter.getInfo(apiKey.getId());
             long now = Instant.now().getEpochSecond();
             long retryAfter = Math.max(1, info.resetAt() - now);
@@ -152,11 +194,22 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         AccessTokenResponse res = responseBuilder.build();
         res.setScope(scope);
         event.detail(Details.SCOPE, scope);
+        event.detail("api_key_event", "API_KEY_EXCHANGED");
+        event.detail("api_key_id", apiKey.getId());
 
         apiKey.setLastUsedAt(Instant.now());
         apiKey.setLastUsedIp(clientConnection.getRemoteAddr());
         apiKey.setUsageCount(apiKey.getUsageCount() + 1);
         apiKeyService.save(apiKey);
+
+        recordExchange(metrics, apiKey.getClientId(), "success", startNanos);
+        session.getKeycloakSessionFactory().publish(new ApiKeyExchangedEvent(
+            realm.getId(),
+            apiKey.getUserId(),
+            apiKey.getClientId(),
+            apiKey.getId(),
+            clientConnection.getRemoteAddr()
+        ));
 
         event.success();
         RateLimitInfo info = rateLimiter.getInfo(apiKey.getId());
@@ -167,7 +220,7 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
 
     @Override
     public EventType getEventType() {
-        return EventType.LOGIN;
+        return EventType.OAUTH2_EXTENSION_GRANT;
     }
 
     private CorsErrorResponseException invalidGrant(String message) {
@@ -247,5 +300,27 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         } else {
             accessToken.setResourceAccess(null);
         }
+    }
+
+    private ApiKeyMetrics resolveMetrics() {
+        ApiKeyMetricsProvider provider = session.getProvider(ApiKeyMetricsProvider.class);
+        return provider != null ? provider.getMetrics() : null;
+    }
+
+    private void recordExchange(ApiKeyMetrics metrics, String clientId, String result, long startNanos) {
+        if (metrics == null) {
+            return;
+        }
+        long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        String realmName = realm != null ? realm.getName() : "unknown";
+        metrics.recordExchange(realmName, clientId, result, durationMs);
+    }
+
+    private void recordRateLimited(ApiKeyMetrics metrics, String clientId) {
+        if (metrics == null) {
+            return;
+        }
+        String realmName = realm != null ? realm.getName() : "unknown";
+        metrics.recordRateLimited(realmName, clientId);
     }
 }

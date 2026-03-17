@@ -43,6 +43,11 @@ public class InMemoryRateLimiter implements RateLimiter {
         entries.remove(keyId);
     }
 
+    @Override
+    public boolean isHealthy() {
+        return true;
+    }
+
     private void cleanupIfNeeded() {
         long now = System.currentTimeMillis();
         long last = lastCleanup.get();
