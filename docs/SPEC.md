@@ -290,9 +290,56 @@ X-RateLimit-Reset: 1710687600
 
 ---
 
-## 7. Client Libraries
+## 7. Authorization (Admin Roles)
 
-### 7.1 Spring Security
+### 9.1 New Roles
+
+New client roles in `realm-management`:
+
+| Role | Description |
+|------|-------------|
+| `view-api-keys` | Read-only access to all API keys in realm |
+| `manage-api-keys` | Full CRUD access to all API keys in realm |
+
+These roles are **independent** — `manage-api-keys` does NOT automatically include `view-api-keys`.
+Admins needing full access should be assigned both roles.
+
+### 9.2 Endpoint Authorization
+
+| Endpoint | Method | Required Role |
+|----------|--------|---------------|
+| `/account/api-keys` | GET | *(authenticated user)* |
+| `/account/api-keys` | POST | *(authenticated user)* |
+| `/account/api-keys/{id}` | DELETE | *(authenticated user, own key only)* |
+| `/admin/.../api-keys` | GET | `view-api-keys` OR `manage-api-keys` |
+| `/admin/.../api-keys/{id}/stats` | GET | `view-api-keys` OR `manage-api-keys` |
+| `/admin/.../users/{id}/api-keys` | POST | `manage-api-keys` |
+| `/admin/.../api-keys/{id}` | DELETE | `manage-api-keys` |
+
+### 9.3 Role Composites
+
+For convenience, realm admins can create composite roles:
+
+```
+api-keys-admin (composite)
+├── view-api-keys
+└── manage-api-keys
+```
+
+### 9.4 No Inheritance from User Roles
+
+API key roles are intentionally separate from `view-users` / `manage-users`:
+- Principle of least privilege
+- API keys may contain sensitive scopes
+- Separate audit trail for key management vs user management
+
+Organizations wanting combined access can create composite roles manually
+
+---
+
+## 8. Client Libraries
+
+### 9.1 Spring Security
 
 ```java
 @Configuration
@@ -321,7 +368,7 @@ public Data getData(@AuthenticationPrincipal KeycloakPrincipal principal) {
 }
 ```
 
-### 7.2 Express.js
+### 9.2 Express.js
 
 ```javascript
 import { keycloakApiKey } from '@keycloak/api-keys-express';
@@ -341,7 +388,7 @@ app.get('/api/data', (req, res) => {
 });
 ```
 
-### 7.3 Hono
+### 9.3 Hono
 
 ```typescript
 import { keycloakApiKey } from '@keycloak/api-keys-hono';
@@ -363,9 +410,9 @@ app.get('/api/data', (c) => {
 
 ---
 
-## 8. UI Components
+## 9. UI Components
 
-### 8.1 Account Console
+### 9.1 Account Console
 
 New section in Account Console: **"API Keys"**
 
@@ -375,7 +422,7 @@ Features:
 - Copy key to clipboard (on creation)
 - Revoke key (with confirmation)
 
-### 8.2 Admin Console
+### 9.2 Admin Console
 
 New section under Users: **"API Keys"**
 
@@ -393,7 +440,7 @@ Realm Settings → API Keys:
 
 ---
 
-## 9. Implementation Phases
+## 10. Implementation Phases
 
 ### Phase 1: Core SPI (MVP)
 - [ ] Data model & JPA entities
@@ -417,7 +464,7 @@ Realm Settings → API Keys:
 
 ---
 
-## 10. Open Questions
+## 11. Open Questions
 
 1. **Key rotation** — should we support automatic rotation with grace period?
 2. **IP allowlist** — restrict key usage to specific IPs?
@@ -426,7 +473,7 @@ Realm Settings → API Keys:
 
 ---
 
-## Appendix A: Configuration
+## 12. Appendix A: Configuration
 
 ### Realm Configuration
 
