@@ -89,6 +89,40 @@ public class ApiKeyService {
         return new CreatedApiKey(saved, generatedKey.plainKey());
     }
 
+    public CreatedApiKey createForUser(RealmModel realm, UserModel user, ApiKeyCreateRequest request) {
+        return createUserKey(realm, user, request);
+    }
+
+    public List<ApiKeyEntity> findByRealm(RealmModel realm, String userId, String clientId, Boolean active) {
+        return repository.findByRealm(realm.getId()).stream()
+            .filter(key -> userId == null || Objects.equals(key.getUserId(), userId))
+            .filter(key -> clientId == null || Objects.equals(key.getClientId(), clientId))
+            .filter(key -> active == null || (active && key.getRevokedAt() == null) || (!active && key.getRevokedAt() != null))
+            .toList();
+    }
+
+    public ApiKeyEntity findById(RealmModel realm, String id) {
+        ApiKeyEntity entity = repository.findById(id);
+        if (entity != null && Objects.equals(entity.getRealmId(), realm.getId())) {
+            return entity;
+        }
+        return null;
+    }
+
+    public ApiKeyEntity getStats(RealmModel realm, String id) {
+        return findById(realm, id);
+    }
+
+    public void revokeKey(RealmModel realm, String keyId) {
+        requireNotBlank(keyId, "keyId is required");
+        ApiKeyEntity entity = findById(realm, keyId);
+        if (entity == null) {
+            throw new NotFoundException("API key not found");
+        }
+        entity.setRevokedAt(Instant.now());
+        repository.save(entity);
+    }
+
     public void revokeUserKey(RealmModel realm, UserModel user, String keyId) {
         requireNotBlank(keyId, "keyId is required");
 
