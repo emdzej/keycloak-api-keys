@@ -62,6 +62,9 @@ public class ApiKeyEntity {
     @Column(name = "usage_count")
     private long usageCount;
 
+    @Column(name = "rate_limit_config")
+    private String rateLimitConfigJson;
+
     protected ApiKeyEntity() {
         // for JPA
     }
@@ -86,7 +89,8 @@ public class ApiKeyEntity {
             Instant.now(),
             null,
             null,
-            0L);
+            0L,
+            null);
     }
 
     public ApiKeyEntity(String id,
@@ -103,7 +107,8 @@ public class ApiKeyEntity {
                         Instant createdAt,
                         Instant lastUsedAt,
                         String lastUsedIp,
-                        long usageCount) {
+                        long usageCount,
+                        String rateLimitConfigJson) {
         validate(keyHash, keyPrefix, name, userId, clientId, realmId);
         this.id = id != null ? id : UUID.randomUUID().toString();
         this.keyHash = keyHash;
@@ -120,6 +125,7 @@ public class ApiKeyEntity {
         this.lastUsedAt = lastUsedAt;
         this.lastUsedIp = lastUsedIp;
         this.usageCount = usageCount;
+        this.rateLimitConfigJson = rateLimitConfigJson;
     }
 
     private static void validate(String keyHash,
@@ -219,5 +225,13 @@ public class ApiKeyEntity {
 
     public void setUsageCount(long usageCount) {
         this.usageCount = usageCount;
+    }
+
+    public String getRateLimitConfigJson() {
+        return rateLimitConfigJson;
+    }
+
+    public void setRateLimitConfigJson(String rateLimitConfigJson) {
+        this.rateLimitConfigJson = rateLimitConfigJson;
     }
 }

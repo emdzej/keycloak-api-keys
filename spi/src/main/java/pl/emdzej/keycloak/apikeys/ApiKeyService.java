@@ -82,7 +82,8 @@ public class ApiKeyService {
             Instant.now(),
             null,
             null,
-            0L
+            0L,
+            null
         );
 
         ApiKeyEntity saved = repository.save(entity);
