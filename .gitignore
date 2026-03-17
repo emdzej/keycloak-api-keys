@@ -1,0 +1,15 @@
+# Docker
+postgres_data/
+
+# Build outputs
+spi/build/
+packages/*/dist/
+account-ui/dist/
+admin-ui/dist/
+
+# Gradle
+.gradle/
+build/
+
+# Node
+node_modules/

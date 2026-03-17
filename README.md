@@ -28,6 +28,40 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 
 ✅ **Design Complete** — ready for implementation
 
+## Local Development
+
+### Prerequisites
+- Java 21
+- Node.js 22+
+- pnpm
+- Docker & Docker Compose
+
+### Quick Start
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build and run Keycloak with extensions
+./scripts/dev.sh
+
+# Or build only
+./scripts/build.sh
+```
+
+Keycloak will be available at http://localhost:8080
+- Admin Console: http://localhost:8080/admin
+- Account Console: http://localhost:8080/realms/master/account
+- Credentials: admin / admin
+
+### Development Workflow
+
+1. Make changes to SPI code (spi/src/...)
+2. Run `./scripts/build.sh`
+3. Restart Keycloak: `docker compose -f docker-compose.dev.yml restart keycloak`
+
+For UI changes, the build output goes directly to theme resources, so just rebuild and refresh the browser.
+
 ## License
 
 Apache License 2.0
