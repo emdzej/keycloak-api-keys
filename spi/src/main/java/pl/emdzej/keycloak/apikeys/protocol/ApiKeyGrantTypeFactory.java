@@ -14,6 +14,11 @@ public class ApiKeyGrantTypeFactory implements OAuth2GrantTypeFactory {
     }
 
     @Override
+    public String getShortcut() {
+        return "api_key";
+    }
+
+    @Override
     public OAuth2GrantType create(KeycloakSession session) {
         return new ApiKeyGrantType();
     }
