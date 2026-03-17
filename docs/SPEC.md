@@ -629,7 +629,92 @@ packages:
 }
 ```
 
-### 11.4 Build Commands
+### 11.4 Testing Strategy
+
+#### Unit Tests
+Standard JUnit 5 tests for business logic, validators, mappers.
+
+```kotlin
+// spi/src/test/kotlin/pl/emdzej/keycloak/apikeys/ApiKeyHasherTest.kt
+class ApiKeyHasherTest {
+    @Test
+    fun `should hash key with SHA-256`() {
+        val hash = ApiKeyHasher.hash("mk_live_abc123...")
+        assertNotNull(hash)
+        assertEquals(64, hash.length) // SHA-256 hex
+    }
+}
+```
+
+#### E2E Tests (Testcontainers)
+Full integration tests with real Keycloak instance.
+
+```kotlin
+// spi/src/test/kotlin/pl/emdzej/keycloak/apikeys/ApiKeyE2ETest.kt
+@Testcontainers
+class ApiKeyE2ETest {
+
+    companion object {
+        @Container
+        val keycloak = KeycloakContainer("quay.io/keycloak/keycloak:26.0.0")
+            .withProviderClassesFrom("build/libs") // Load our SPI JAR
+            .withRealmImportFile("test-realm.json")
+    }
+
+    @Test
+    fun `should create API key and exchange for token`() {
+        val client = keycloak.createAdminClient()
+        
+        // Create API key via REST API
+        val response = client.target(keycloak.authServerUrl)
+            .path("/realms/test/account/api-keys")
+            .request()
+            .header("Authorization", "Bearer ${getUserToken()}")
+            .post(Entity.json(mapOf(
+                "name" to "test-key",
+                "clientId" to "my-app"
+            )))
+        
+        assertEquals(201, response.status)
+        val apiKey = response.readEntity(Map::class.java)["key"] as String
+        
+        // Exchange API key for JWT
+        val tokenResponse = client.target(keycloak.authServerUrl)
+            .path("/realms/test/protocol/openid-connect/token")
+            .request()
+            .post(Entity.form(Form()
+                .param("grant_type", "urn:ietf:params:oauth:grant-type:api-key")
+                .param("api_key", apiKey)
+                .param("client_id", "my-app")
+            ))
+        
+        assertEquals(200, tokenResponse.status)
+        val jwt = tokenResponse.readEntity(Map::class.java)["access_token"]
+        assertNotNull(jwt)
+    }
+
+    @Test
+    fun `should reject revoked API key`() { ... }
+
+    @Test
+    fun `should enforce rate limits`() { ... }
+}
+```
+
+#### Test Commands
+
+```bash
+# Unit tests only (fast)
+./gradlew :spi:test --tests '*Test' --exclude-tags e2e
+
+# E2E tests only (requires Docker)
+./gradlew :spi:test --tests '*E2ETest'
+
+# All tests
+./gradlew :spi:test
+```
+
+### 11.5 Build Commands
 
 ```bash
 # Java/Kotlin (Gradle)
