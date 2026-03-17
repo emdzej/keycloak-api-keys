@@ -650,10 +650,19 @@ pnpm --filter @keycloak-api-keys/express build  # Build single package
 
 ## 12. Open Questions
 
-1. **Key rotation** — should we support automatic rotation with grace period?
-2. **IP allowlist** — restrict key usage to specific IPs?
-3. **Webhook notifications** — notify on key creation/revocation?
-4. **Service account keys** — special handling for service accounts?
+*Resolved decisions from initial design phase:*
+
+1. ~~**Key rotation** — should we support automatic rotation with grace period?~~
+   → **Manual rotation on demand** (Phase 2+). User/admin can rotate key, old key invalidated immediately.
+
+2. ~~**IP allowlist** — restrict key usage to specific IPs?~~
+   → **No.** Out of scope.
+
+3. ~~**Webhook notifications** — notify on key creation/revocation?~~
+   → **No.** Use Keycloak event listeners if needed.
+
+4. ~~**Service account keys** — special handling for service accounts?~~
+   → **No special handling.** Service accounts are users in Keycloak, so the mechanism works out-of-box. Not actively promoted since service accounts already have `client_credentials` grant.
 
 ---
 
