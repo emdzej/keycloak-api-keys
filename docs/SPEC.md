@@ -542,7 +542,7 @@ plugins {
 }
 
 subprojects {
-    group = "io.github.emdzej.keycloak"
+    group = "pl.emdzej.keycloak"
     version = "0.1.0-SNAPSHOT"
 
     repositories {
