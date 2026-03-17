@@ -486,7 +486,169 @@ Realm Settings → API Keys:
 
 ---
 
-## 11. Open Questions
+## 11. Project Structure
+
+### 11.1 Overview
+
+The project uses a monorepo structure with:
+- **Java components**: Gradle (Kotlin DSL)
+- **TypeScript components**: pnpm workspaces
+
+```
+keycloak-api-keys/
+├── settings.gradle.kts           # Gradle multi-project settings
+├── build.gradle.kts              # Root build config
+├── pnpm-workspace.yaml           # pnpm workspace config
+├── package.json                  # Root package.json for pnpm
+│
+├── spi/                          # Keycloak SPI (Java/Kotlin)
+│   ├── build.gradle.kts
+│   └── src/
+│
+├── account-ui/                   # Account Console extension (TS)
+│   ├── package.json
+│   └── src/
+│
+├── admin-ui/                     # Admin Console extension (TS)
+│   ├── package.json
+│   └── src/
+│
+└── packages/                     # Client libraries (TS)
+    ├── spring/                   # Spring Security (Java)
+    │   └── build.gradle.kts
+    ├── express/
+    │   └── package.json
+    ├── fastify/
+    │   └── package.json
+    └── hono/
+        └── package.json
+```
+
+### 11.2 Gradle Configuration (Java/Kotlin)
+
+**settings.gradle.kts**:
+```kotlin
+rootProject.name = "keycloak-api-keys"
+
+include("spi")
+include("packages:spring")
+```
+
+**build.gradle.kts** (root):
+```kotlin
+plugins {
+    kotlin("jvm") version "2.1.0" apply false
+    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
+}
+
+subprojects {
+    group = "io.github.emdzej.keycloak"
+    version = "0.1.0-SNAPSHOT"
+
+    repositories {
+        mavenCentral()
+    }
+}
+```
+
+**spi/build.gradle.kts**:
+```kotlin
+plugins {
+    kotlin("jvm")
+    id("com.github.johnrengelman.shadow")
+}
+
+dependencies {
+    compileOnly("org.keycloak:keycloak-core:26.0.0")
+    compileOnly("org.keycloak:keycloak-server-spi:26.0.0")
+    compileOnly("org.keycloak:keycloak-server-spi-private:26.0.0")
+    compileOnly("org.keycloak:keycloak-services:26.0.0")
+    
+    implementation("com.google.guava:guava:33.0.0-jre")
+    
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("org.testcontainers:keycloak:1.19.0")
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("")
+    mergeServiceFiles()
+}
+```
+
+### 11.3 pnpm Configuration (TypeScript)
+
+**pnpm-workspace.yaml**:
+```yaml
+packages:
+  - 'account-ui'
+  - 'admin-ui'
+  - 'packages/*'
+  - '!packages/spring'  # Exclude Java packages
+```
+
+**package.json** (root):
+```json
+{
+  "name": "keycloak-api-keys",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsup": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}
+```
+
+**packages/express/package.json**:
+```json
+{
+  "name": "@keycloak-api-keys/express",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest"
+  },
+  "peerDependencies": {
+    "express": "^4.18.0 || ^5.0.0"
+  }
+}
+```
+
+### 11.4 Build Commands
+
+```bash
+# Java/Kotlin (Gradle)
+./gradlew build                    # Build all Java modules
+./gradlew :spi:shadowJar          # Build SPI fat JAR for Keycloak
+./gradlew :packages:spring:build  # Build Spring integration
+
+# TypeScript (pnpm)
+pnpm install                       # Install all dependencies
+pnpm build                         # Build all TS packages
+pnpm --filter @keycloak-api-keys/express build  # Build single package
+
+# Full build
+./gradlew build && pnpm build
+```
+
+---
+
+## 12. Open Questions
 
 1. **Key rotation** — should we support automatic rotation with grace period?
 2. **IP allowlist** — restrict key usage to specific IPs?
@@ -495,7 +657,7 @@ Realm Settings → API Keys:
 
 ---
 
-## 12. Appendix A: Configuration
+## 13. Appendix A: Configuration
 
 ### Realm Configuration
 
