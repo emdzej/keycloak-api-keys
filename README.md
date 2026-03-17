@@ -26,7 +26,7 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 
 ## Status
 
-🟡 **Design Phase** — specification in progress
+✅ **Design Complete** — ready for implementation
 
 ## License
 
