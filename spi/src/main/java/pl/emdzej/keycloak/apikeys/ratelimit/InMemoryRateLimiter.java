@@ -12,6 +12,7 @@ public class InMemoryRateLimiter implements RateLimiter {
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
     private final AtomicLong lastCleanup = new AtomicLong(0L);
 
+    @Override
     public void updateConfig(String keyId, RateLimitConfig config) {
         RateLimitConfig normalized = normalize(config);
         entries.compute(keyId, (id, entry) -> {

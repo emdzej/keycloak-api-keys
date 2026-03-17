@@ -245,6 +245,17 @@ X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1710687600
 ```
 
+### 4.4 Infinispan Cache Configuration
+
+Add the cache to your Keycloak `infinispan.xml`:
+
+```xml
+<local-cache name="api-keys-rate-limit">
+    <expiration lifespan="60000"/>
+    <memory max-count="10000"/>
+</local-cache>
+```
+
 ---
 
 ## 5. Audit Logging

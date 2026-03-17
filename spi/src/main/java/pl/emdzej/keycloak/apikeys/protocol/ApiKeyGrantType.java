@@ -33,15 +33,15 @@ import org.keycloak.sessions.RootAuthenticationSessionModel;
 import pl.emdzej.keycloak.apikeys.ApiKeyHasher;
 import pl.emdzej.keycloak.apikeys.ApiKeyService;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
-import pl.emdzej.keycloak.apikeys.ratelimit.InMemoryRateLimiter;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimitConfig;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimitConfigResolver;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimitInfo;
+import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiter;
+import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 
 public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase {
     public static final String GRANT_TYPE = "urn:ietf:params:oauth:grant-type:api-key";
 
-    private static final InMemoryRateLimiter RATE_LIMITER = new InMemoryRateLimiter();
     private static final RateLimitConfigResolver RATE_LIMIT_CONFIG_RESOLVER = new RateLimitConfigResolver();
 
     @Override
@@ -89,9 +89,14 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         event.detail(Details.USERNAME, user.getUsername());
 
         RateLimitConfig rateLimitConfig = RATE_LIMIT_CONFIG_RESOLVER.resolve(realm, client, apiKey);
-        RATE_LIMITER.updateConfig(apiKey.getId(), rateLimitConfig);
-        if (!RATE_LIMITER.tryAcquire(apiKey.getId())) {
-            RateLimitInfo info = RATE_LIMITER.getInfo(apiKey.getId());
+        RateLimiterProvider provider = session.getProvider(RateLimiterProvider.class);
+        RateLimiter rateLimiter = provider != null ? provider.getRateLimiter() : null;
+        if (rateLimiter == null) {
+            throw invalidGrant("Rate limiter unavailable");
+        }
+        rateLimiter.updateConfig(apiKey.getId(), rateLimitConfig);
+        if (!rateLimiter.tryAcquire(apiKey.getId())) {
+            RateLimitInfo info = rateLimiter.getInfo(apiKey.getId());
             long now = Instant.now().getEpochSecond();
             long retryAfter = Math.max(1, info.resetAt() - now);
             Map<String, Object> error = Map.of(
@@ -154,7 +159,7 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         apiKeyService.save(apiKey);
 
         event.success();
-        RateLimitInfo info = RATE_LIMITER.getInfo(apiKey.getId());
+        RateLimitInfo info = rateLimiter.getInfo(apiKey.getId());
         Response.ResponseBuilder builder = Response.ok(res, MediaType.APPLICATION_JSON_TYPE);
         addRateLimitHeaders(builder, info);
         return cors.add(builder);
