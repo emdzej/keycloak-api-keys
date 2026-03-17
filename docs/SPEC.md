@@ -388,7 +388,28 @@ app.get('/api/data', (req, res) => {
 });
 ```
 
-### 9.3 Hono
+### 8.3 Fastify
+
+```typescript
+import Fastify from 'fastify';
+import { keycloakApiKeyPlugin } from '@keycloak/api-keys-fastify';
+
+const fastify = Fastify();
+
+fastify.register(keycloakApiKeyPlugin, {
+  realm: 'my-realm',
+  serverUrl: 'https://keycloak.example.com',
+  clientId: 'my-app',
+  clientSecret: process.env.CLIENT_SECRET
+});
+
+fastify.get('/api/data', async (request, reply) => {
+  const userId = request.auth.sub;
+  // ...
+});
+```
+
+### 8.4 Hono
 
 ```typescript
 import { keycloakApiKey } from '@keycloak/api-keys-hono';
@@ -455,6 +476,7 @@ Realm Settings → API Keys:
 ### Phase 3: Client Libraries
 - [ ] Spring Security integration
 - [ ] Express.js middleware
+- [ ] Fastify plugin
 - [ ] Hono middleware
 
 ### Phase 4: Production Hardening

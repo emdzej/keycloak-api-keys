@@ -15,6 +15,7 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 | `keycloak-api-keys-admin-ui` | Admin Console UI extension for administrators |
 | `keycloak-api-keys-spring` | Spring Security integration |
 | `keycloak-api-keys-express` | Express.js middleware |
+| `keycloak-api-keys-fastify` | Fastify plugin |
 | `keycloak-api-keys-hono` | Hono middleware (edge-ready) |
 
 ## Documentation
