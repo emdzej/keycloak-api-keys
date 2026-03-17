@@ -30,6 +30,7 @@ tasks.test {
 }
 
 tasks.shadowJar {
-    archiveClassifier.set("")
+    archiveClassifier.set("all")
     mergeServiceFiles()
+    archiveBaseName.set("keycloak-api-keys")
 }
