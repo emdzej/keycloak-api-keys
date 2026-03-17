@@ -13,3 +13,6 @@ build/
 
 # Node
 node_modules/
+
+# Turborepo
+.turbo/
