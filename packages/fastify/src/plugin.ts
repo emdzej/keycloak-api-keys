@@ -40,7 +40,7 @@ async function keycloakApiKeyPluginImpl(
   const client = createTokenExchangeClient(options);
   const cache = new TokenCache<AuthInfo>();
 
-  fastify.decorateRequest('auth', null);
+  fastify.decorateRequest('auth', undefined as AuthInfo | undefined);
 
   fastify.addHook('preHandler', async (request, reply) => {
     if (!shouldProtectRoute(request.url, prefix)) {
