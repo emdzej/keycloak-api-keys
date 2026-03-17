@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: outputDir,
-    emptyOutDir: true,
+    emptyOutDir: false,
     sourcemap: true,
     lib: {
       entry: path.resolve(__dirname, "src/index.tsx"),
