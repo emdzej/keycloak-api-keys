@@ -14,6 +14,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
@@ -24,6 +25,8 @@ import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreateRequest;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreatedResponse;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyStatsResponse;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
+import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiter;
+import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 
 @Path("")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -72,6 +75,23 @@ public class AdminApiKeyResource {
         );
     }
 
+    @GET
+    @Path("health")
+    public Response health() {
+        AdminAuth auth = new AdminAuth(session);
+        auth.requireViewApiKeys();
+
+        RateLimiterProvider provider = session.getProvider(RateLimiterProvider.class);
+        RateLimiter rateLimiter = provider != null ? provider.getRateLimiter() : null;
+        boolean rateLimiterHealthy = rateLimiter != null && rateLimiter.isHealthy();
+
+        return Response.ok(Map.of(
+            "status", "UP",
+            "keysCount", apiKeyService.countAll(),
+            "cacheStatus", rateLimiterHealthy ? "UP" : "DOWN"
+        )).build();
+    }
+
     @POST
     @Path("users/{userId}/api-keys")
     public Response createForUser(@PathParam("userId") String userId, ApiKeyCreateRequest request) {
@@ -84,7 +104,7 @@ public class AdminApiKeyResource {
             throw new NotFoundException("User not found");
         }
 
-        ApiKeyService.CreatedApiKey created = apiKeyService.createForUser(realm, user, request);
+        ApiKeyService.CreatedApiKey created = apiKeyService.createForUser(realm, user, request, auth.getUser());
         ApiKeyCreatedResponse response = toCreatedResponse(created);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
@@ -96,7 +116,7 @@ public class AdminApiKeyResource {
         auth.requireManageApiKeys();
 
         RealmModel realm = session.getContext().getRealm();
-        apiKeyService.revokeKey(realm, keyId);
+        apiKeyService.revokeKey(realm, keyId, auth.getUser());
         return Response.noContent().build();
     }
 

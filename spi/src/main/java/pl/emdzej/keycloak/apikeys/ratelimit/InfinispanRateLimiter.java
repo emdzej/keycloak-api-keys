@@ -65,6 +65,11 @@ public class InfinispanRateLimiter implements RateLimiter {
         cache.remove(buildKey(keyId, "burst"));
     }
 
+    @Override
+    public boolean isHealthy() {
+        return cache != null && cache.getStatus().allowInvocations();
+    }
+
     private boolean incrementAndCheck(String keyId, String windowName, int limit, long windowDurationMs) {
         if (limit <= 0) {
             return true;
