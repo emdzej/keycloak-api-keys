@@ -201,11 +201,23 @@ public class ApiKeyEntity {
         return lastUsedAt;
     }
 
+    public void setLastUsedAt(Instant lastUsedAt) {
+        this.lastUsedAt = lastUsedAt;
+    }
+
     public String getLastUsedIp() {
         return lastUsedIp;
     }
 
+    public void setLastUsedIp(String lastUsedIp) {
+        this.lastUsedIp = lastUsedIp;
+    }
+
     public long getUsageCount() {
         return usageCount;
+    }
+
+    public void setUsageCount(long usageCount) {
+        this.usageCount = usageCount;
     }
 }
