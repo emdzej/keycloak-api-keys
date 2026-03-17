@@ -225,7 +225,7 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
 
     private CorsErrorResponseException invalidGrant(String message) {
         event.detail(Details.REASON, message);
-        event.error(Errors.INVALID_GRANT);
+        event.error(Errors.INVALID_TOKEN);
         return new CorsErrorResponseException(cors, OAuthErrorException.INVALID_GRANT, message, Response.Status.BAD_REQUEST);
     }
 
