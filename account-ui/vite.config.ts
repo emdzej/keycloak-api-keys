@@ -19,10 +19,16 @@ export default defineConfig({
       fileName: () => "api-keys.js"
     },
     rollupOptions: {
+      external: ["react", "react-dom", "react/jsx-runtime"],
       output: {
         entryFileNames: "api-keys.js",
         chunkFileNames: "api-keys-[name]-[hash].js",
-        assetFileNames: "api-keys-[name]-[hash][extname]"
+        assetFileNames: "api-keys-[name]-[hash][extname]",
+        globals: {
+          react: "React",
+          "react-dom": "ReactDOM",
+          "react/jsx-runtime": "jsxRuntime"
+        }
       }
     }
   }
