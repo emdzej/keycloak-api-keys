@@ -1,6 +1,6 @@
 plugins {
     java
-    id("com.github.johnrengelman.shadow")
+    id("com.gradleup.shadow")
 }
 
 java {
@@ -39,6 +39,7 @@ tasks.test {
 
 tasks.shadowJar {
     archiveClassifier.set("all")
+    archiveVersion.set("")
     mergeServiceFiles()
     archiveBaseName.set("keycloak-api-keys")
 }
