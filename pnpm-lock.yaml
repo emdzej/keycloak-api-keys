@@ -49,40 +49,6 @@ importers:
         specifier: ^6.0.0
         version: 6.4.1(@types/node@22.19.15)
 
-  admin-ui:
-    dependencies:
-      '@patternfly/react-core':
-        specifier: ^5.0.0
-        version: 5.4.14(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@patternfly/react-icons':
-        specifier: ^5.0.0
-        version: 5.4.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@patternfly/react-table':
-        specifier: ^5.0.0
-        version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.2.0
-        version: 18.3.1(react@18.3.1)
-    devDependencies:
-      '@types/react':
-        specifier: ^18.2.0
-        version: 18.3.28
-      '@types/react-dom':
-        specifier: ^18.2.0
-        version: 18.3.7(@types/react@18.3.28)
-      '@vitejs/plugin-react':
-        specifier: ^4.0.0
-        version: 4.7.0(vite@6.4.1(@types/node@22.19.15))
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.1(@types/node@22.19.15)
-
   packages/express:
     devDependencies:
       '@types/express':

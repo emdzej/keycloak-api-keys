@@ -51,7 +51,10 @@ export const listApiKeys = async (): Promise<ApiKeyListResponse> => {
   if (!response.ok) {
     throw new Error(`Failed to load API keys (${response.status})`);
   }
-  return (await response.json()) as ApiKeyListResponse;
+  const data = await response.json();
+  // Backend returns array directly, wrap in expected format
+  const keys = Array.isArray(data) ? data : (data.keys ?? []);
+  return { keys };
 };
 
 export const createApiKey = async (
