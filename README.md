@@ -85,7 +85,16 @@ Keycloak must be running locally with the SPI installed:
 docker compose up -d
 ```
 
-Then create an API key via the Account Console (`http://localhost:8080/realms/master/account`) or via the REST API:
+Then create an API key via the Account Console (`http://localhost:8080/realms/master/account`) or via the REST API.
+
+> **Client authentication note**
+>
+> The token exchange endpoint (`/realms/{realm}/protocol/openid-connect/token`) authenticates the client before the API key grant runs — this is standard OAuth2 behaviour enforced by Keycloak.
+>
+> - **Public clients** (e.g. `admin-cli`, `account-console`) — no `client_secret` needed, just `client_id`
+> - **Confidential clients** — `client_secret` must be included in the request body
+>
+> The API key must have been created for the same `client_id` that is sent in the exchange request. The middleware packages accept an optional `clientSecret` option — omit it for public clients, provide it for confidential ones.
 
 ```bash
 # Get a token first

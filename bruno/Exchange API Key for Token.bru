@@ -29,8 +29,15 @@ docs {
   
   Set `apiKey` variable to the full API key (e.g., `cli_abc123...`).
   
+  Client authentication is handled by Keycloak before the grant type runs:
+  - Public clients (e.g. admin-cli, account-console) — no client_secret needed
+  - Confidential clients — add client_secret to the form body
+  
+  The API key must have been created for the same client_id sent in the request.
+  
   Response includes:
-  - `access_token` - JWT token
+  - `access_token` - JWT token scoped and role-restricted per the API key's grants
   - `expires_in` - token lifetime in seconds
   - `token_type` - Bearer
+  - `api_key_id` claim inside the JWT identifies which key was used
 }

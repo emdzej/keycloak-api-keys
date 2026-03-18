@@ -92,9 +92,14 @@ Prefix examples:
 
 ### 3.1 User API (Account Console)
 
-Base path: `/realms/{realm}/account/api-keys`
+Base path: `/realms/{realm}/api-keys`
+
+> Mounted via `RealmResourceProvider` (factory ID `api-keys`). Requests to `/realms/{realm}/account/api-keys` with `Accept: application/json` are intercepted by Keycloak's `AccountLoader` before reaching custom SPIs, so the user REST API is served at the realm path instead.
 
 #### List Keys
+```
+GET /realms/{realm}/api-keys
+Authorization: Bearer {access_token}
 ```
 GET /realms/{realm}/account/api-keys
 Authorization: Bearer {access_token}
@@ -118,7 +123,7 @@ Response: {
 
 #### Create Key
 ```
-POST /realms/{realm}/account/api-keys
+POST /realms/{realm}/api-keys
 Authorization: Bearer {access_token}
 Content-Type: application/json
 
@@ -142,7 +147,7 @@ Response: {
 
 #### Revoke Key
 ```
-DELETE /realms/{realm}/account/api-keys/{keyId}
+DELETE /realms/{realm}/api-keys/{keyId}
 Authorization: Bearer {access_token}
 
 Response: 204 No Content
@@ -303,48 +308,38 @@ Add the cache to your Keycloak `infinispan.xml`:
 
 ## 7. Authorization (Admin Roles)
 
-### 9.1 New Roles
+### 7.1 Admin Endpoint Authorization
 
-New client roles in `realm-management`:
+The admin REST API uses Keycloak's **built-in realm management roles** — no custom roles are created. Authorization is enforced via `AdminPermissionEvaluator` injected by `AdminRealmResourceProvider`.
 
-| Role | Description |
-|------|-------------|
-| `view-api-keys` | Read-only access to all API keys in realm |
-| `manage-api-keys` | Full CRUD access to all API keys in realm |
+| Endpoint | Method | Required permission |
+|----------|--------|---------------------|
+| `/realms/{realm}/api-keys` | GET | any authenticated user (own keys only) |
+| `/realms/{realm}/api-keys` | POST | any authenticated user (own keys only) |
+| `/realms/{realm}/api-keys/{id}` | DELETE | any authenticated user (own key only) |
+| `/realms/{realm}/api-keys/health` | GET | public (no auth) |
+| `/admin/realms/{realm}/api-keys` | GET | `view-realm` |
+| `/admin/realms/{realm}/api-keys/{id}/stats` | GET | `view-realm` |
+| `/admin/realms/{realm}/api-keys/health` | GET | `view-realm` |
+| `/admin/realms/{realm}/api-keys/users/{id}/api-keys` | POST | `manage-realm` |
+| `/admin/realms/{realm}/api-keys/{id}` | DELETE | `manage-realm` |
 
-These roles are **independent** — `manage-api-keys` does NOT automatically include `view-api-keys`.
-Admins needing full access should be assigned both roles.
+### 7.2 Built-in Keycloak Roles Used
 
-### 9.2 Endpoint Authorization
+| Keycloak role | Grants |
+|---------------|--------|
+| `view-realm` (in `realm-management` client) | Read access to all API keys and stats in the realm |
+| `manage-realm` (in `realm-management` client) | Create keys for any user, revoke any key |
 
-| Endpoint | Method | Required Role |
-|----------|--------|---------------|
-| `/account/api-keys` | GET | *(authenticated user)* |
-| `/account/api-keys` | POST | *(authenticated user)* |
-| `/account/api-keys/{id}` | DELETE | *(authenticated user, own key only)* |
-| `/admin/.../api-keys` | GET | `view-api-keys` OR `manage-api-keys` |
-| `/admin/.../api-keys/{id}/stats` | GET | `view-api-keys` OR `manage-api-keys` |
-| `/admin/.../users/{id}/api-keys` | POST | `manage-api-keys` |
-| `/admin/.../api-keys/{id}` | DELETE | `manage-api-keys` |
+These are standard Keycloak roles already assigned to realm administrators. No additional role configuration is required.
 
-### 9.3 Role Composites
+### 7.3 User Endpoint Authorization
 
-For convenience, realm admins can create composite roles:
+User-facing endpoints (`/realms/{realm}/api-keys`) authenticate via `BearerTokenAuthenticator`. Any valid, non-expired Bearer token issued by the realm is accepted — no specific role is required. The authenticated user can only access their own keys; the service enforces ownership on every operation.
 
-```
-api-keys-admin (composite)
-├── view-api-keys
-└── manage-api-keys
-```
+### 7.4 No Custom Role Creation
 
-### 9.4 No Inheritance from User Roles
-
-API key roles are intentionally separate from `view-users` / `manage-users`:
-- Principle of least privilege
-- API keys may contain sensitive scopes
-- Separate audit trail for key management vs user management
-
-Organizations wanting combined access can create composite roles manually
+The implementation does **not** create `view-api-keys` / `manage-api-keys` custom roles. Access is controlled entirely through the existing `view-realm` / `manage-realm` permissions, keeping the authorization model consistent with the rest of Keycloak's admin API.
 
 ---
 
@@ -764,31 +759,52 @@ pnpm --filter @keycloak-api-keys/express build  # Build single package
 
 ## 13. Appendix A: Configuration
 
-### Realm Configuration
+There is no global enable/disable flag, no default expiration, and no per-client key prefix configuration in the current implementation. The only runtime configuration is **rate limiting**, which is resolved in a three-level priority chain: per-key → per-client → per-realm → built-in defaults.
+
+### Rate Limit Defaults (built-in)
+
+| Limit | Default value |
+|-------|--------------|
+| Per minute | 60 |
+| Per hour | 1000 |
+| Per day | 10000 |
+| Burst | 10 |
+
+### Realm-level Rate Limits
+
+Set via Keycloak realm custom attributes (Admin Console → Realm Settings → Attributes):
+
+| Attribute | Type | Example |
+|-----------|------|---------|
+| `apiKeysRateLimitPerMinute` | integer string | `"120"` |
+| `apiKeysRateLimitPerHour` | integer string | `"2000"` |
+| `apiKeysRateLimitPerDay` | integer string | `"20000"` |
+| `apiKeysRateLimitBurst` | integer string | `"20"` |
+
+Alternatively, set all four in one JSON blob under `apiKeysRateLimits`:
 
 ```json
-{
-  "apiKeys": {
-    "enabled": true,
-    "defaultExpiration": "P1Y",
-    "maxKeysPerUser": 10,
-    "rateLimits": {
-      "perMinute": 60,
-      "perHour": 1000,
-      "perDay": 10000
-    }
-  }
-}
+{ "perMinute": 120, "perHour": 2000, "perDay": 20000, "burst": 20 }
 ```
 
-### Client Configuration
+### Client-level Rate Limits
+
+Same attribute names on the **client** (Admin Console → Clients → {client} → Attributes). Client-level overrides realm-level.
+
+### Per-key Rate Limits
+
+Set in the `rateLimitConfigJson` field when creating an API key:
 
 ```json
-{
-  "apiKeysEnabled": true,
-  "apiKeysPrefix": "myapp_live",
-  "apiKeysRateLimits": {
-    "perMinute": 100
-  }
-}
+{ "perMinute": 10, "perHour": 100, "perDay": 1000, "burst": 3 }
 ```
+
+Per-key config overrides both client and realm level.
+
+### Resolution Order
+
+```
+per-key → client → realm → built-in defaults
+```
+
+The first non-null value found for each field wins. Partial overrides are supported — e.g. setting only `perMinute` at the realm level while leaving the others at their built-in defaults.
