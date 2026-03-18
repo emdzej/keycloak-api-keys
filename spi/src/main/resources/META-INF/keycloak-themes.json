@@ -2,7 +2,7 @@
   "themes": [
     {
       "name": "api-keys",
-      "types": ["account", "admin"]
+      "types": ["account"]
     }
   ]
 }
