@@ -21,6 +21,6 @@
   {
     "label": "apiKeys",
     "path": "api-keys",
-    "modulePath": "./api-keys.js"
+    "modulePath": "/api-keys.js"
   }
 ]
