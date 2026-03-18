@@ -21,7 +21,6 @@ import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreatedResponse;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyResponse;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
 
-@Path("api-keys")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class AccountApiKeyResource {

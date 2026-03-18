@@ -29,7 +29,6 @@ import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiter;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 
-@Path("")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class AdminApiKeyResource {
