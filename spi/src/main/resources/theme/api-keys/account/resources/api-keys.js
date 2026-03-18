@@ -27611,7 +27611,8 @@ const g2 = (o) => {
   const o = await fetch(i1(), l1());
   if (!o.ok)
     throw new Error(`Failed to load API keys (${o.status})`);
-  return await o.json();
+  const u = await o.json();
+  return { keys: Array.isArray(u) ? u : u.keys ?? [] };
 }, uP = async (o) => {
   const u = await fetch(
     i1(),
