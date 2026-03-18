@@ -1,0 +1,32 @@
+meta {
+  name: Get API Key Stats
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/admin/realms/{{realm}}/api-keys/:keyId/stats
+  body: none
+  auth: inherit
+}
+
+params:path {
+  keyId: {{keyId}}
+}
+
+headers {
+  Accept: application/json
+}
+
+vars:pre-request {
+  keyId: 
+}
+
+docs {
+  Get usage statistics for an API key.
+  
+  Returns:
+  - `usageCount` - total number of uses
+  - `lastUsedAt` - last usage timestamp
+  - `lastUsedIp` - IP address of last use
+}

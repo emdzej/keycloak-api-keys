@@ -1,0 +1,17 @@
+meta {
+  name: collection
+}
+
+auth {
+  mode: oauth2
+}
+
+auth:oauth2 {
+  grant_type: authorization_code
+  callback_url: http://localhost:8080/callback
+  authorization_url: {{authUrl}}/auth
+  access_token_url: {{authUrl}}/token
+  client_id: {{clientId}}
+  scope: {{scope}}
+  pkce: true
+}

@@ -1,0 +1,15 @@
+meta {
+  name: List My API Keys
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/realms/{{realm}}/account/api-keys
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}

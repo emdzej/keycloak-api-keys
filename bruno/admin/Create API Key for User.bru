@@ -1,0 +1,38 @@
+meta {
+  name: Create API Key for User
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/realms/{{realm}}/api-keys/users/:userId/api-keys
+  body: json
+  auth: inherit
+}
+
+params:path {
+  userId: {{userId}}
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Admin Created Key",
+    "clientId": "admin-cli",
+    "expiresInDays": 90
+  }
+}
+
+vars:pre-request {
+  userId: 
+}
+
+docs {
+  Create an API key for a specific user.
+  
+  Set `userId` variable to the target user's ID.
+}

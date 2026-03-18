@@ -1,0 +1,29 @@
+meta {
+  name: Revoke API Key
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/admin/realms/{{realm}}/api-keys/:keyId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  keyId: {{keyId}}
+}
+
+headers {
+  Accept: application/json
+}
+
+vars:pre-request {
+  keyId: 
+}
+
+docs {
+  Revoke an API key by ID.
+  
+  Set `keyId` variable before running.
+}
