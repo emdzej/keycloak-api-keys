@@ -29,8 +29,8 @@ import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiter;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 
-@Consumes(MediaType.APPLICATION_JSON)
-@Produces(MediaType.APPLICATION_JSON)
+@Path("/")
+@Produces("application/json;realm=admin")
 public class AdminApiKeyResource {
     private final KeycloakSession session;
     private final RealmModel realm;
@@ -45,6 +45,7 @@ public class AdminApiKeyResource {
     }
 
     @GET
+    @Path("/")
     public List<AdminApiKeyResponse> list(@QueryParam("userId") String userId,
                                           @QueryParam("clientId") String clientId,
                                           @QueryParam("status") String status) {
@@ -93,6 +94,7 @@ public class AdminApiKeyResource {
 
     @POST
     @Path("users/{userId}/api-keys")
+    @Consumes(MediaType.APPLICATION_JSON)
     public Response createForUser(@PathParam("userId") String userId, ApiKeyCreateRequest request) {
         auth.realm().requireManageRealm();
 
@@ -108,6 +110,7 @@ public class AdminApiKeyResource {
 
     @DELETE
     @Path("{keyId}")
+    @Consumes(MediaType.APPLICATION_JSON)
     public Response revoke(@PathParam("keyId") String keyId) {
         auth.realm().requireManageRealm();
 

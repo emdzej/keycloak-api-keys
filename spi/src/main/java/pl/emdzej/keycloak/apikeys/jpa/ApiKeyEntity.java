@@ -5,6 +5,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.HashSet;
@@ -37,11 +38,13 @@ public class ApiKeyEntity {
     private String realmId;
 
     @ElementCollection
-    @CollectionTable(name = "api_key_roles")
+    @CollectionTable(name = "api_key_roles", joinColumns = @JoinColumn(name = "api_key_id"))
+    @Column(name = "roles")
     private Set<String> roles = new HashSet<>();
 
     @ElementCollection
-    @CollectionTable(name = "api_key_scopes")
+    @CollectionTable(name = "api_key_scopes", joinColumns = @JoinColumn(name = "api_key_id"))
+    @Column(name = "scopes")
     private Set<String> scopes = new HashSet<>();
 
     @Column(name = "expires_at")

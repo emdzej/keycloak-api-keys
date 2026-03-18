@@ -38,7 +38,11 @@ const getClientOptions = (): string[] => {
   return [];
 };
 
-export const ApiKeysPage = () => {
+type Props = {
+  getToken: () => Promise<string>;
+};
+
+export const ApiKeysPage = ({ getToken }: Props) => {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,14 +58,14 @@ export const ApiKeysPage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await listApiKeys();
+      const response = await listApiKeys(getToken);
       setApiKeys(response.keys);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load API keys");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [getToken]);
 
   useEffect(() => {
     void refreshKeys();
@@ -71,7 +75,7 @@ export const ApiKeysPage = () => {
     setIsCreating(true);
     setError(null);
     try {
-      const response = await createApiKey(payload);
+      const response = await createApiKey(getToken, payload);
       setCreatedKey(response.key);
       setIsCreateOpen(false);
       await refreshKeys();
@@ -86,7 +90,7 @@ export const ApiKeysPage = () => {
     setIsRevoking(true);
     setError(null);
     try {
-      await revokeApiKey(apiKey.id);
+      await revokeApiKey(getToken, apiKey.id);
       setRevokeTarget(null);
       await refreshKeys();
     } catch (err) {

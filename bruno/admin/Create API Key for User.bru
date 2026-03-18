@@ -5,13 +5,13 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/admin/realms/{{realm}}/api-keys/users/:userId/api-keys
+  url: {{baseUrl}}/realms/{{realm}}/api-keys/users/:userId/api-keys
   body: json
   auth: inherit
 }
 
 params:path {
-  userId: {{userId}}
+  userId: c5d8f080-7c70-40a1-b19d-6fae41ead7cf
 }
 
 headers {
@@ -28,7 +28,7 @@ body:json {
 }
 
 vars:pre-request {
-  userId: 
+  userId: c5d8f080-7c70-40a1-b19d-6fae41ead7cf
 }
 
 docs {

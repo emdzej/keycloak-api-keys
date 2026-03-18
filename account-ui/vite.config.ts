@@ -4,7 +4,7 @@ import path from "node:path";
 
 const outputDir = path.resolve(
   __dirname,
-  "../spi/src/main/resources/theme/api-keys/account/resources"
+  "../spi/src/main/resources/theme/api-keys/account/resources/content"
 );
 
 export default defineConfig({

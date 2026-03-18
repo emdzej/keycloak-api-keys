@@ -10,83 +10,78 @@ const getRealm = () => {
   if (realmMatch?.[1]) {
     return realmMatch[1];
   }
-  const maybeRealm = (window as { kcContext?: { realm?: string } }).kcContext
-    ?.realm;
-  return maybeRealm ?? "";
+  const env = getEnvironment();
+  return env?.realm ?? "";
 };
 
-const getToken = () => {
-  const windowAny = window as {
-    keycloak?: { token?: string };
-    kcContext?: { token?: string };
-  };
-  return windowAny.keycloak?.token ?? windowAny.kcContext?.token;
+// Read the environment JSON embedded in the page by Keycloak
+const getEnvironment = (): { realm?: string; serverBaseUrl?: string } | null => {
+  try {
+    const el = document.getElementById("environment");
+    return el ? JSON.parse(el.textContent ?? "{}") : null;
+  } catch {
+    return null;
+  }
 };
 
 const apiBase = () => {
   const realm = getRealm();
-  return `${window.location.origin}/realms/${realm}/account/api-keys`;
+  return `${window.location.origin}/realms/${realm}/api-keys`;
 };
 
-const withAuth = (init?: RequestInit): RequestInit => {
-  const token = getToken();
-  const headers: HeadersInit = {
-    Accept: "application/json",
-    ...(init?.headers ?? {})
-  };
+const withAuth = (getToken: () => Promise<string>, init?: RequestInit): Promise<RequestInit> =>
+  getToken().then((token) => {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      ...(init?.headers as Record<string, string> ?? {})
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return {
+      credentials: "include" as RequestCredentials,
+      ...init,
+      headers
+    };
+  });
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return {
-    credentials: "include",
-    ...init,
-    headers
-  };
-};
-
-export const listApiKeys = async (): Promise<ApiKeyListResponse> => {
-  const response = await fetch(apiBase(), withAuth());
+export const listApiKeys = async (getToken: () => Promise<string>): Promise<ApiKeyListResponse> => {
+  const response = await fetch(apiBase(), await withAuth(getToken));
   if (!response.ok) {
     throw new Error(`Failed to load API keys (${response.status})`);
   }
   const data = await response.json();
-  // Backend returns array directly, wrap in expected format
   const keys = Array.isArray(data) ? data : (data.keys ?? []);
   return { keys };
 };
 
 export const createApiKey = async (
+  getToken: () => Promise<string>,
   payload: CreateApiKeyRequest
 ): Promise<CreateApiKeyResponse> => {
   const response = await fetch(
     apiBase(),
-    withAuth({
+    await withAuth(getToken, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     })
   );
-
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || `Failed to create API key (${response.status})`);
   }
-
   return (await response.json()) as CreateApiKeyResponse;
 };
 
-export const revokeApiKey = async (id: string): Promise<void> => {
+export const revokeApiKey = async (
+  getToken: () => Promise<string>,
+  id: string
+): Promise<void> => {
   const response = await fetch(
     `${apiBase()}/${id}`,
-    withAuth({
-      method: "DELETE"
-    })
+    await withAuth(getToken, { method: "DELETE" })
   );
-
   if (!response.ok && response.status !== 204) {
     const message = await response.text();
     throw new Error(message || `Failed to revoke API key (${response.status})`);

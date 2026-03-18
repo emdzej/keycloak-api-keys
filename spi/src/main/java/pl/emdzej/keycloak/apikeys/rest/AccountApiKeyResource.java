@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.jboss.logging.Logger;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager.AuthResult;
@@ -21,15 +22,22 @@ import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreatedResponse;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyResponse;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
 
-@Consumes(MediaType.APPLICATION_JSON)
+@Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 public class AccountApiKeyResource {
+    private static final Logger logger = Logger.getLogger(AccountApiKeyResource.class);
     private final KeycloakSession session;
     private final ApiKeyService apiKeyService;
 
     public AccountApiKeyResource(KeycloakSession session) {
         this.session = session;
         this.apiKeyService = new ApiKeyService(session);
+    }
+
+    @GET
+    @Path("health")
+    public Response health() {
+        return Response.ok("{\"status\":\"ok\"}").type(MediaType.APPLICATION_JSON).build();
     }
 
     @GET
@@ -42,6 +50,7 @@ public class AccountApiKeyResource {
     }
 
     @POST
+    @Consumes(MediaType.APPLICATION_JSON)
     public Response create(ApiKeyCreateRequest request) {
         AuthResult auth = authenticate();
         ApiKeyService.CreatedApiKey created = apiKeyService.createUserKey(session.getContext().getRealm(), auth.user(), request, auth.user());
@@ -59,7 +68,13 @@ public class AccountApiKeyResource {
 
     private AuthResult authenticate() {
         AuthResult auth = new AppAuthManager.BearerTokenAuthenticator(session).authenticate();
+        logger.debugf("Bearer auth result: %s", auth);
         if (auth == null) {
+            auth = new AppAuthManager().authenticateIdentityCookie(session, session.getContext().getRealm());
+            logger.debugf("Cookie auth result: %s", auth);
+        }
+        if (auth == null) {
+            logger.warn("Both bearer and cookie auth failed for api-keys request");
             throw new NotAuthorizedException("Bearer");
         }
         return auth;
