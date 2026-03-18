@@ -1,5 +1,5 @@
 import express from "express";
-import { keycloakApiKey } from "@keycloak-api-keys/express";
+import { keycloakApiKey } from "@emdzej/keycloak-api-keys-express";
 
 const app = express();
 app.use(express.json());

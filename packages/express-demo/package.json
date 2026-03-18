@@ -1,5 +1,5 @@
 {
-  "name": "@keycloak-api-keys/express-demo",
+  "name": "@emdzej/keycloak-api-keys-express-demo",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@keycloak-api-keys/express": "workspace:*",
+    "@emdzej/keycloak-api-keys-express": "workspace:*",
     "express": "^4.18.0"
   },
   "devDependencies": {

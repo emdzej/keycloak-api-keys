@@ -1,5 +1,5 @@
 {
-  "name": "@keycloak-api-keys/fastify",
+  "name": "@emdzej/keycloak-api-keys-fastify",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",

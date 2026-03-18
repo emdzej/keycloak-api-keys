@@ -1,18 +1,18 @@
-# @keycloak-api-keys/fastify
+# @emdzej/keycloak-api-keys-fastify
 
 Fastify plugin for validating Keycloak API keys and attaching decoded auth info to the request.
 
 ## Installation
 
 ```bash
-pnpm add @keycloak-api-keys/fastify fastify
+pnpm add @emdzej/keycloak-api-keys-fastify fastify
 ```
 
 ## Usage
 
 ```ts
 import Fastify from 'fastify';
-import { keycloakApiKeyPlugin } from '@keycloak-api-keys/fastify';
+import { keycloakApiKeyPlugin } from '@emdzej/keycloak-api-keys-fastify';
 
 const fastify = Fastify();
 

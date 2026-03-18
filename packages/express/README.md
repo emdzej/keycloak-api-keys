@@ -1,18 +1,18 @@
-# @keycloak-api-keys/express
+# @emdzej/keycloak-api-keys-express
 
 Express.js middleware for validating Keycloak API keys and attaching decoded auth info to the request.
 
 ## Installation
 
 ```bash
-pnpm add @keycloak-api-keys/express express
+pnpm add @emdzej/keycloak-api-keys-express express
 ```
 
 ## Usage
 
 ```ts
 import express from 'express';
-import { keycloakApiKey } from '@keycloak-api-keys/express';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-express';
 
 const app = express();
 

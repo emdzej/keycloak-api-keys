@@ -1,18 +1,18 @@
-# @keycloak-api-keys/hono
+# @emdzej/keycloak-api-keys-hono
 
 Hono middleware for authenticating requests with Keycloak API keys.
 
 ## Installation
 
 ```bash
-pnpm add @keycloak-api-keys/hono hono
+pnpm add @emdzej/keycloak-api-keys-hono hono
 ```
 
 ## Basic usage
 
 ```ts
 import { Hono } from 'hono';
-import { keycloakApiKey } from '@keycloak-api-keys/hono';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-hono';
 
 const app = new Hono();
 
@@ -33,7 +33,7 @@ app.get('/api/data', (c) => {
 
 ```ts
 import { Hono } from 'hono';
-import { keycloakApiKey } from '@keycloak-api-keys/hono';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-hono';
 
 const app = new Hono();
 
@@ -53,7 +53,7 @@ export default app;
 
 ```ts
 import { Hono } from 'hono';
-import { keycloakApiKey } from '@keycloak-api-keys/hono';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-hono';
 
 const app = new Hono();
 
@@ -71,7 +71,7 @@ Deno.serve(app.fetch);
 
 ```ts
 import { Hono } from 'hono';
-import { keycloakApiKey } from '@keycloak-api-keys/hono';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-hono';
 
 const app = new Hono();
 

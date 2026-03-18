@@ -1,8 +1,8 @@
 # Keycloak API Keys — Specification
 
-## 1. Overview
+## Overview
 
-### 1.1 Problem Statement
+### Problem Statement
 
 Keycloak provides robust OAuth 2.0 / OIDC authentication but lacks native API key support. API keys are essential for:
 - Machine-to-machine communication where OAuth flows are impractical
@@ -10,15 +10,15 @@ Keycloak provides robust OAuth 2.0 / OIDC authentication but lacks native API ke
 - Simplified authentication for scripts and CLI tools
 - Long-lived credentials without refresh token complexity
 
-### 1.2 Solution
+### Solution
 
 Extend Keycloak with:
 1. **API Key Storage & Management** — create, list, revoke keys
 2. **Token Exchange Grant** — exchange API key for JWT
-3. **User & Admin UI** — self-service and administrative management
+3. **Account Console UI** — user self-service management
 4. **Client Libraries** — middleware for popular frameworks
 
-### 1.3 Design Principles
+### Design Principles
 
 - **Keycloak as Authority** — all validation happens in Keycloak, no local JWT-style validation
 - **Client-scoped Keys** — API keys are always issued for a specific client (application)
@@ -27,98 +27,87 @@ Extend Keycloak with:
 
 ---
 
-## 2. Data Model
+## Data Model
 
-### 2.1 API Key Entity
+### API Key Entity
 
 ```
 ApiKey {
   id: UUID                    # Internal ID
   keyHash: String             # SHA-256 hash of the key (never store plain)
-  keyPrefix: String           # First 8 chars for identification (e.g., "mk_live_")
+  keyPrefix: String           # First 8 chars for identification (e.g., "myapp_a1b2")
   name: String                # User-friendly name (e.g., "CI/CD Pipeline")
-  
+
   userId: String              # Owner user ID
   clientId: String            # Associated client (application)
   realmId: String             # Realm
-  
-  roles: String[]             # Assigned roles (subset of user's roles)
-  scopes: String[]            # Assigned scopes (subset of client's scopes)
-  
-  expiresAt: Timestamp        # Expiration date (nullable = never expires)
-  revokedAt: Timestamp        # Revocation timestamp (nullable = active)
-  
-  rateLimitPerMinute: Integer # Rate limit (nullable = use client default)
-  rateLimitPerHour: Integer
-  rateLimitPerDay: Integer
-  
+
+  roles: String[]             # Granted roles (subset of user's roles)
+  scopes: String[]            # Granted scopes (subset of client's scopes)
+  rateLimitConfigJson: String # Optional JSON rate limit override (see Configuration)
+
+  expiresAt: Timestamp        # Expiration date (null = never expires)
+  revokedAt: Timestamp        # Revocation timestamp (null = active)
+
   lastUsedAt: Timestamp       # Last successful usage
   lastUsedIp: String          # IP of last usage
   usageCount: Long            # Total usage count
-  
+
   createdAt: Timestamp
-  createdBy: String           # User or admin who created
-  metadata: JSON              # Custom metadata (optional)
 }
 ```
 
-### 2.2 Key Format
+### Key Format
 
 ```
-Format: {prefix}_{randomBytes}
-Example: myapp_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
+Format: {clientIdPrefix}_{randomBytes}
+Example: admincli_EMrTFCBhQII1AmBEuE7WEQBm9WMe3OhRzIgRNd9rN802yaTucdcnKdu5SfGimmJc
 
 Components:
-- prefix: Configurable per client (default: client_id shortened)
+- prefix: first segment of clientId (up to first hyphen or 8 chars)
 - separator: underscore
 - random: 64 characters (base62: a-z, A-Z, 0-9)
-
-Total length: prefix + 1 + 64 = ~70 characters
-
-Prefix examples:
-- Client "my-awesome-app" → prefix "myapp" or custom "maa_prod"
-- Client "billing-service" → prefix "billing" or custom "bs_live"
 ```
 
-### 2.3 Storage
+### Storage
 
-- **Database**: Keycloak's JPA entity in realm schema
-- **Hashing**: SHA-256 (key is shown once on creation, then only hash stored)
-- **Indexing**: keyHash (unique), userId+clientId, expiresAt
+- **Database**: Keycloak's JPA entity, tables created via Liquibase on startup
+- **Hashing**: SHA-256 (key is shown once on creation, then only the hash is stored)
+- **Indexes**: `key_hash` (unique), `realm_id + user_id`, `realm_id`
+- **Collection tables**: `api_key_roles`, `api_key_scopes` (FK → `api_key.id`, CASCADE DELETE)
 
 ---
 
-## 3. API Design
+## API Design
 
-### 3.1 User API (Account Console)
+### User API
 
 Base path: `/realms/{realm}/api-keys`
 
-> Mounted via `RealmResourceProvider` (factory ID `api-keys`). Requests to `/realms/{realm}/account/api-keys` with `Accept: application/json` are intercepted by Keycloak's `AccountLoader` before reaching custom SPIs, so the user REST API is served at the realm path instead.
+> Mounted via `RealmResourceProvider` (factory ID `api-keys`). Requests to
+> `/realms/{realm}/account/api-keys` with `Accept: application/json` are intercepted
+> by Keycloak's `AccountLoader` before reaching custom SPIs, so the user REST API is
+> served at the realm path instead.
 
 #### List Keys
 ```
 GET /realms/{realm}/api-keys
 Authorization: Bearer {access_token}
-```
-GET /realms/{realm}/account/api-keys
-Authorization: Bearer {access_token}
 
-Response: {
-  "keys": [
-    {
-      "id": "uuid",
-      "name": "CI Pipeline",
-      "keyPrefix": "mk_live_a1b2",
-      "clientId": "my-app",
-      "roles": ["user", "api-access"],
-      "scopes": ["read", "write"],
-      "expiresAt": "2027-01-01T00:00:00Z",
-      "lastUsedAt": "2026-03-17T10:30:00Z",
-      "createdAt": "2026-01-15T08:00:00Z"
-    }
-  ]
-}
+Response 200: [
+  {
+    "id": "uuid",
+    "name": "CI Pipeline",
+    "keyPrefix": "myapp_a1b2",
+    "clientId": "my-app",
+    "roles": ["user", "api-access"],
+    "scopes": ["read", "write"],
+    "expiresAt": "2027-01-01T00:00:00Z",
+    "lastUsedAt": "2026-03-17T10:30:00Z",
+    "createdAt": "2026-01-15T08:00:00Z",
+    "usageCount": 42
+  }
+]
 ```
 
 #### Create Key
@@ -130,18 +119,19 @@ Content-Type: application/json
 Request: {
   "name": "CI Pipeline",
   "clientId": "my-app",
-  "roles": ["api-access"],           // Optional: subset of user's roles
-  "scopes": ["read"],                // Optional: subset of client's scopes
-  "expiresAt": "2027-01-01T00:00:00Z", // Optional
-  "metadata": {}                      // Optional
+  "roles": ["api-access"],              // Optional: subset of user's roles
+  "scopes": ["read"],                   // Optional: subset of client's scopes
+  "expiresAt": "2027-01-01T00:00:00Z"  // Optional
 }
 
-Response: {
+Response 201: {
   "id": "uuid",
-  "key": "mk_live_a1b2c3d4...",      // ⚠️ Only returned ONCE
+  "key": "myapp_a1b2c3d4...",           // ⚠️ Only returned ONCE
   "name": "CI Pipeline",
   "clientId": "my-app",
-  ...
+  "keyPrefix": "myapp_a1b2",
+  "createdAt": "...",
+  "expiresAt": "..."
 }
 ```
 
@@ -153,26 +143,58 @@ Authorization: Bearer {access_token}
 Response: 204 No Content
 ```
 
-### 3.2 Admin API
+#### Health
+```
+GET /realms/{realm}/api-keys/health
+
+Response 200: { "status": "ok" }
+```
+
+### Admin API
 
 Base path: `/admin/realms/{realm}/api-keys`
 
-#### List All Keys (with filters)
+> Mounted via `AdminRealmResourceProviderFactory`. Requires the caller to be
+> authenticated as an admin user with appropriate realm-management roles (see Authorization).
+
+#### List All Keys
 ```
-GET /admin/realms/{realm}/api-keys?userId={userId}&clientId={clientId}&status=active
+GET /admin/realms/{realm}/api-keys?userId={userId}&clientId={clientId}&status=active|revoked
 Authorization: Bearer {admin_token}
+
+Response 200: [
+  {
+    "id": "uuid",
+    "name": "CI Pipeline",
+    "userId": "user-uuid",
+    "clientId": "my-app",
+    "keyPrefix": "myapp_a1b2",
+    "createdAt": "...",
+    "expiresAt": "...",
+    "lastUsedAt": "...",
+    "revokedAt": null,
+    "usageCount": 42
+  }
+]
 ```
 
 #### Create Key for User
 ```
-POST /admin/realms/{realm}/users/{userId}/api-keys
+POST /admin/realms/{realm}/api-keys/users/{userId}/api-keys
 Authorization: Bearer {admin_token}
+Content-Type: application/json
+
+Request: same shape as user Create Key above
+
+Response 201: same shape as user Create Key response
 ```
 
 #### Revoke Any Key
 ```
 DELETE /admin/realms/{realm}/api-keys/{keyId}
 Authorization: Bearer {admin_token}
+
+Response: 204 No Content
 ```
 
 #### Get Key Statistics
@@ -180,79 +202,93 @@ Authorization: Bearer {admin_token}
 GET /admin/realms/{realm}/api-keys/{keyId}/stats
 Authorization: Bearer {admin_token}
 
-Response: {
+Response 200: {
   "usageCount": 15432,
-  "lastUsedAt": "...",
-  "lastUsedIp": "...",
-  "usageByDay": [...]
+  "lastUsedAt": "2026-03-18T10:00:00Z",
+  "lastUsedIp": "203.0.113.42"
 }
 ```
 
-### 3.3 Token Exchange API
+#### Health
+```
+GET /admin/realms/{realm}/api-keys/health
+Authorization: Bearer {admin_token}   // view-realm required
+
+Response 200: {
+  "status": "UP",
+  "keysCount": 128,
+  "cacheStatus": "UP"
+}
+```
+
+### Token Exchange
 
 ```
 POST /realms/{realm}/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=urn:ietf:params:oauth:grant-type:api-key
-api_key=mk_live_a1b2c3d4...
-client_id=my-app                    // Must match key's clientId
-client_secret=xxx                   // If client is confidential
+api_key=myapp_a1b2c3d4...
+client_id=my-app                    // Must match the key's clientId
+client_secret=xxx                   // Only required for confidential clients
 
-Response: {
+Response 200: {
   "access_token": "eyJ...",
   "token_type": "Bearer",
   "expires_in": 300,
-  "scope": "read write"
+  "scope": "openid profile"
 }
 ```
 
-**Token contains:**
-- `sub`: User ID (key owner)
-- `azp`: Client ID
-- `roles`: Intersection of (user roles ∩ key roles)
-- `scope`: Intersection of (client scopes ∩ key scopes)
-- `api_key_id`: Reference to the key used
-- Standard JWT claims
+**JWT contains:**
+- `sub` — user ID (key owner)
+- `azp` — client ID the key is bound to
+- `api_key_id` — ID of the API key used
+- `realm_access.roles` — intersection of mapper-produced roles and API key's granted roles
+- `resource_access` — same intersection for client roles
+- `scope` — scopes resolved by Keycloak's mapper pipeline, constrained to the API key's granted scopes
+- Standard Keycloak claims (`iss`, `iat`, `exp`, `jti`, `sid`, etc.)
+
+> Roles and scopes in the token are filtered **down** from what protocol mappers produce —
+> they are never escalated beyond what the user's session would normally contain.
 
 ---
 
-## 4. Rate Limiting
+## Rate Limiting
 
-### 4.1 Configuration Levels
+### Configuration Levels
 
-1. **Realm default** — applies to all keys in realm
-2. **Client default** — applies to all keys for client
-3. **Per-key override** — specific key settings
+Resolution order (first non-null wins per field):
 
-### 4.2 Limits
+```
+per-key → client → realm → built-in defaults
+```
 
-| Limit | Default | Configurable |
-|-------|---------|--------------|
-| Per minute | 60 | Yes |
-| Per hour | 1000 | Yes |
-| Per day | 10000 | Yes |
-| Burst | 10 | Yes |
+### Defaults
 
-### 4.3 Response on Limit
+| Limit | Default |
+|-------|---------|
+| Per minute | 60 |
+| Per hour | 1000 |
+| Per day | 10000 |
+| Burst | 10 |
+
+### Response on Limit
 
 ```
 HTTP 429 Too Many Requests
-{
-  "error": "rate_limit_exceeded",
-  "error_description": "API key rate limit exceeded",
-  "retry_after": 45
-}
 
 Headers:
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1710687600
+  X-RateLimit-Limit: 60
+  X-RateLimit-Remaining: 0
+  X-RateLimit-Reset: 1710687600
+  Retry-After: 45
 ```
 
-### 4.4 Infinispan Cache Configuration
+### Infinispan Cache
 
-Add the cache to your Keycloak `infinispan.xml`:
+The rate limiter uses an Infinispan cache named `api-keys-rate-limit`. In `start-dev` mode
+Keycloak falls back to an in-memory cache automatically. For production, add to `infinispan.xml`:
 
 ```xml
 <local-cache name="api-keys-rate-limit">
@@ -263,129 +299,134 @@ Add the cache to your Keycloak `infinispan.xml`:
 
 ---
 
-## 5. Audit Logging
+## Audit Logging
 
-### 5.1 Events
+Keycloak events emitted on key lifecycle and usage:
 
-| Event | Data |
-|-------|------|
-| `API_KEY_CREATED` | keyId, userId, clientId, createdBy |
+| Event | Details |
+|-------|---------|
+| `API_KEY_CREATED` | keyId, userId, clientId |
 | `API_KEY_REVOKED` | keyId, userId, revokedBy |
 | `API_KEY_EXCHANGED` | keyId, userId, clientId, ip |
 | `API_KEY_RATE_LIMITED` | keyId, userId, limit |
 | `API_KEY_EXPIRED_REJECTED` | keyId, userId |
 
-### 5.2 Storage
-
-- Keycloak Event Store (standard)
-- Optional: External event listener (Kafka, webhook)
+Events are stored in the Keycloak Event Store and can be consumed by any registered
+Keycloak `EventListenerProvider` (e.g. for Kafka or webhook forwarding).
 
 ---
 
-## 6. Security Considerations
+## Security
 
-### 6.1 Key Storage
-- Keys are hashed with SHA-256 before storage
-- Plain key shown only once on creation
-- No way to recover key — must create new one
+### Key Storage
+- Keys are hashed with SHA-256 before storage — the plain key is never persisted
+- The plain key is returned only once, at creation time
+- There is no recovery mechanism — a lost key must be revoked and recreated
 
-### 6.2 Key Transmission
-- Always HTTPS
-- Keys should be treated like passwords
-- Recommend short-lived keys where possible
+### Key Transmission
+- Always use HTTPS in production
+- Treat API keys like passwords — rotate regularly, limit scope to what is needed
+- Prefer short-lived keys (`expiresAt`) over permanent ones
 
-### 6.3 Scope Restriction
-- Key can only have **subset** of user's roles
-- Key can only have **subset** of client's scopes
-- Cannot escalate privileges via API key
+### Scope and Role Restriction
+- A key's roles must be a **subset** of the owner user's roles at token exchange time
+- A key's scopes must be a **subset** of the client's configured scopes
+- Protocol mappers run first, then roles/scopes are filtered down — privilege escalation via API key is not possible
 
-### 6.4 Revocation
-- Immediate effect (no token caching)
-- Admin can revoke any key
-- User can revoke own keys
-
----
-
-## 7. Authorization (Admin Roles)
-
-### 7.1 Admin Endpoint Authorization
-
-The admin REST API uses Keycloak's **built-in realm management roles** — no custom roles are created. Authorization is enforced via `AdminPermissionEvaluator` injected by `AdminRealmResourceProvider`.
-
-| Endpoint | Method | Required permission |
-|----------|--------|---------------------|
-| `/realms/{realm}/api-keys` | GET | any authenticated user (own keys only) |
-| `/realms/{realm}/api-keys` | POST | any authenticated user (own keys only) |
-| `/realms/{realm}/api-keys/{id}` | DELETE | any authenticated user (own key only) |
-| `/realms/{realm}/api-keys/health` | GET | public (no auth) |
-| `/admin/realms/{realm}/api-keys` | GET | `view-realm` |
-| `/admin/realms/{realm}/api-keys/{id}/stats` | GET | `view-realm` |
-| `/admin/realms/{realm}/api-keys/health` | GET | `view-realm` |
-| `/admin/realms/{realm}/api-keys/users/{id}/api-keys` | POST | `manage-realm` |
-| `/admin/realms/{realm}/api-keys/{id}` | DELETE | `manage-realm` |
-
-### 7.2 Built-in Keycloak Roles Used
-
-| Keycloak role | Grants |
-|---------------|--------|
-| `view-realm` (in `realm-management` client) | Read access to all API keys and stats in the realm |
-| `manage-realm` (in `realm-management` client) | Create keys for any user, revoke any key |
-
-These are standard Keycloak roles already assigned to realm administrators. No additional role configuration is required.
-
-### 7.3 User Endpoint Authorization
-
-User-facing endpoints (`/realms/{realm}/api-keys`) authenticate via `BearerTokenAuthenticator`. Any valid, non-expired Bearer token issued by the realm is accepted — no specific role is required. The authenticated user can only access their own keys; the service enforces ownership on every operation.
-
-### 7.4 No Custom Role Creation
-
-The implementation does **not** create `view-api-keys` / `manage-api-keys` custom roles. Access is controlled entirely through the existing `view-realm` / `manage-realm` permissions, keeping the authorization model consistent with the rest of Keycloak's admin API.
+### Revocation
+- Revocation takes effect immediately on the next token exchange
+- Middleware token caches will serve cached tokens until they expire naturally (TTL = `min(cacheTtl, token.expires_in)`)
+- To force immediate invalidation, set `cacheTtl: 0` in the middleware options
 
 ---
 
-## 8. Client Libraries
+## Authorization
 
-### 9.1 Spring Security
+### User Endpoints
+
+`/realms/{realm}/api-keys` authenticates via `BearerTokenAuthenticator`. Any valid,
+non-expired Bearer token from the realm is accepted — no specific role is required.
+Ownership is enforced server-side: users can only list, create, and revoke their own keys.
+
+### Admin Endpoints
+
+Uses Keycloak's built-in `AdminPermissionEvaluator` — no custom roles are created.
+
+| Endpoint | Required permission |
+|----------|---------------------|
+| `GET /admin/.../api-keys` | `view-realm` |
+| `GET /admin/.../api-keys/{id}/stats` | `view-realm` |
+| `GET /admin/.../api-keys/health` | `view-realm` |
+| `POST /admin/.../api-keys/users/{id}/api-keys` | `manage-realm` |
+| `DELETE /admin/.../api-keys/{id}` | `manage-realm` |
+
+`view-realm` and `manage-realm` are standard roles in Keycloak's `realm-management` client,
+already assigned to realm administrators. No additional configuration is required.
+
+---
+
+## Client Libraries
+
+All middleware packages share the same options shape and behaviour. The API key is read
+from the `X-API-Key` request header (configurable). On a cache miss the middleware
+exchanges the key for a JWT via the token endpoint and caches the decoded claims for
+`min(cacheTtl, token.expires_in)` seconds.
+
+### Spring Security
 
 ```java
+// build.gradle.kts
+implementation("pl.emdzej.keycloak:keycloak-api-keys-spring:0.1.0")
+
+// SecurityConfig.java
 @Configuration
-@EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           KeycloakApiKeyConfigurer configurer) throws Exception {
+        configurer.configure(http);
         http
-            .addFilterBefore(
-                new KeycloakApiKeyFilter(keycloakConfig),
-                UsernamePasswordAuthenticationFilter.class
-            )
+            .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/**").authenticated()
+                .requestMatchers("/health").permitAll()
+                .anyRequest().authenticated()
             );
         return http.build();
     }
 }
 
-// Usage - principal is populated from exchanged JWT
+# application.yml
+keycloak:
+  api-keys:
+    server-url: ${KEYCLOAK_URL:https://keycloak.example.com}
+    realm: ${KEYCLOAK_REALM:my-realm}
+    client-id: ${CLIENT_ID:my-app}
+    client-secret: ${CLIENT_SECRET:}   # omit for public clients
+    cache-ttl: ${CACHE_TTL:PT5M}
+
+// Route handler
 @GetMapping("/api/data")
-public Data getData(@AuthenticationPrincipal KeycloakPrincipal principal) {
-    String userId = principal.getSubject();
+public Data getData(Authentication auth) {
+    String userId = auth.getName();   // sub claim
     // ...
 }
 ```
 
-### 9.2 Express.js
+### Express.js
 
-```javascript
-import { keycloakApiKey } from '@keycloak/api-keys-express';
+```typescript
+import express from 'express';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-express';
 
 const app = express();
 
 app.use('/api', keycloakApiKey({
-  realm: 'my-realm',
   serverUrl: 'https://keycloak.example.com',
+  realm: 'my-realm',
   clientId: 'my-app',
-  clientSecret: process.env.CLIENT_SECRET
+  // clientSecret: process.env.CLIENT_SECRET   // only for confidential clients
+  cacheTtl: 300
 }));
 
 app.get('/api/data', (req, res) => {
@@ -394,39 +435,41 @@ app.get('/api/data', (req, res) => {
 });
 ```
 
-### 8.3 Fastify
+### Fastify
 
 ```typescript
 import Fastify from 'fastify';
-import { keycloakApiKeyPlugin } from '@keycloak/api-keys-fastify';
+import { keycloakApiKeyPlugin } from '@emdzej/keycloak-api-keys-fastify';
 
 const fastify = Fastify();
 
-fastify.register(keycloakApiKeyPlugin, {
-  realm: 'my-realm',
+await fastify.register(keycloakApiKeyPlugin, {
   serverUrl: 'https://keycloak.example.com',
+  realm: 'my-realm',
   clientId: 'my-app',
-  clientSecret: process.env.CLIENT_SECRET
+  prefix: '/api',
+  cacheTtl: 300
 });
 
-fastify.get('/api/data', async (request, reply) => {
+fastify.get('/api/data', async (request) => {
   const userId = request.auth.sub;
   // ...
 });
 ```
 
-### 8.4 Hono
+### Hono
 
 ```typescript
-import { keycloakApiKey } from '@keycloak/api-keys-hono';
+import { Hono } from 'hono';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-hono';
 
 const app = new Hono();
 
 app.use('/api/*', keycloakApiKey({
-  realm: 'my-realm',
   serverUrl: 'https://keycloak.example.com',
+  realm: 'my-realm',
   clientId: 'my-app',
-  clientSecret: Bun.env.CLIENT_SECRET
+  cacheTtl: 300
 }));
 
 app.get('/api/data', (c) => {
@@ -437,374 +480,95 @@ app.get('/api/data', (c) => {
 
 ---
 
-## 9. UI Components
+## Account Console UI
 
-### 9.1 Account Console
+An API Keys page is injected into the Keycloak Account Console via the `AccountResourceProvider`
+SPI and a `content.json` extension. It is served as a React module loaded by the account console's
+`ContentComponent`.
 
-New section in Account Console: **"API Keys"**
+Features implemented:
+- List the authenticated user's API keys (name, client, prefix, expiry, last used)
+- Create a new key (name, clientId, optional expiry, optional roles/scopes)
+- Revoke a key (with confirmation)
+- Copy the plain key to clipboard on creation (shown once only)
 
-Features:
-- List user's API keys (name, client, expires, last used)
-- Create new key (with role/scope selection)
-- Copy key to clipboard (on creation)
-- Revoke key (with confirmation)
-
-### 9.2 Admin Console
-
-New section under Users: **"API Keys"**
-
-Features:
-- List all keys (filterable by user, client, status)
-- Create key for any user
-- Revoke any key
-- View usage statistics
-- Bulk revoke (e.g., all keys for a user)
-
-Realm Settings → API Keys:
-- Configure default rate limits
-- Configure key prefix
-- Enable/disable API keys for realm
+The UI is built with Vite as an ES module (`packages/content/api-keys/api-keys.js`) and
+loaded via the account console's import map — React and PatternFly are provided by the
+host bundle, not bundled into the extension.
 
 ---
 
-## 10. Implementation Phases
-
-### Phase 1: Core SPI (MVP)
-- [ ] Data model & JPA entities
-- [ ] REST API (user + admin)
-- [ ] Token exchange grant type
-- [ ] Basic rate limiting (in-memory)
-
-### Phase 2: UI
-- [ ] Account Console extension
-- [ ] Admin Console extension
-
-### Phase 3: Client Libraries
-- [ ] Spring Security integration
-- [ ] Express.js middleware
-- [ ] Fastify plugin
-- [ ] Hono middleware
-
-### Phase 4: Production Hardening
-- [ ] Distributed rate limiting (Redis/Infinispan)
-- [ ] Metrics & monitoring
-- [ ] Documentation & examples
-
----
-
-## 11. Project Structure
-
-### 11.1 Overview
-
-The project uses a monorepo structure with:
-- **Java components**: Gradle (Kotlin DSL)
-- **TypeScript components**: pnpm workspaces
+## Project Structure
 
 ```
 keycloak-api-keys/
-├── settings.gradle.kts           # Gradle multi-project settings
-├── build.gradle.kts              # Root build config
-├── pnpm-workspace.yaml           # pnpm workspace config
-├── package.json                  # Root package.json for pnpm
+├── spi/                          # Keycloak SPI (Java 21, Gradle)
+│   └── src/main/java/
+│       └── pl/emdzej/keycloak/apikeys/
+│           ├── jpa/              # JPA entity + Liquibase changelog
+│           ├── protocol/         # api-key grant type
+│           ├── ratelimit/        # Rate limiter (Infinispan / in-memory)
+│           ├── rest/             # User + admin JAX-RS resources
+│           └── ...
 │
-├── spi/                          # Keycloak SPI (Java/Kotlin)
-│   ├── build.gradle.kts
+├── account-ui/                   # Account Console extension (TypeScript, Vite)
 │   └── src/
 │
-├── account-ui/                   # Account Console extension (TS)
-│   ├── package.json
-│   └── src/
+├── packages/
+│   ├── spring/                   # Spring Security integration (Java 21, Gradle)
+│   ├── express/                  # Express middleware (TypeScript)
+│   ├── fastify/                  # Fastify plugin (TypeScript)
+│   ├── hono/                     # Hono middleware (TypeScript)
+│   ├── express-demo/             # Express demo app (port 3001)
+│   ├── fastify-demo/             # Fastify demo app (port 3002)
+│   ├── hono-demo/                # Hono demo app (port 3003)
+│   └── spring-demo/              # Spring Boot demo app (port 3004)
 │
-├── admin-ui/                     # Admin Console extension (TS)
-│   ├── package.json
-│   └── src/
-│
-└── packages/                     # Client libraries (TS)
-    ├── spring/                   # Spring Security (Java)
-    │   └── build.gradle.kts
-    ├── express/
-    │   └── package.json
-    ├── fastify/
-    │   └── package.json
-    └── hono/
-        └── package.json
+├── bruno/                        # Bruno API collection
+└── docker-compose.yml            # Keycloak + PostgreSQL
 ```
 
-### 11.2 Gradle Configuration (Java/Kotlin)
-
-**settings.gradle.kts**:
-```kotlin
-rootProject.name = "keycloak-api-keys"
-
-include("spi")
-include("packages:spring")
-```
-
-**build.gradle.kts** (root):
-```kotlin
-plugins {
-    kotlin("jvm") version "2.1.0" apply false
-    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
-}
-
-subprojects {
-    group = "pl.emdzej.keycloak"
-    version = "0.1.0-SNAPSHOT"
-
-    repositories {
-        mavenCentral()
-    }
-}
-```
-
-**spi/build.gradle.kts**:
-```kotlin
-plugins {
-    kotlin("jvm")
-    id("com.github.johnrengelman.shadow")
-}
-
-dependencies {
-    compileOnly("org.keycloak:keycloak-core:26.0.0")
-    compileOnly("org.keycloak:keycloak-server-spi:26.0.0")
-    compileOnly("org.keycloak:keycloak-server-spi-private:26.0.0")
-    compileOnly("org.keycloak:keycloak-services:26.0.0")
-    
-    implementation("com.google.guava:guava:33.0.0-jre")
-    
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
-    testImplementation("org.testcontainers:keycloak:1.19.0")
-}
-
-tasks.shadowJar {
-    archiveClassifier.set("")
-    mergeServiceFiles()
-}
-```
-
-### 11.3 pnpm Configuration (TypeScript)
-
-**pnpm-workspace.yaml**:
-```yaml
-packages:
-  - 'account-ui'
-  - 'admin-ui'
-  - 'packages/*'
-  - '!packages/spring'  # Exclude Java packages
-```
-
-**package.json** (root):
-```json
-{
-  "name": "keycloak-api-keys",
-  "private": true,
-  "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.0",
-    "tsup": "^8.0.0",
-    "vitest": "^3.0.0"
-  }
-}
-```
-
-**packages/express/package.json**:
-```json
-{
-  "name": "@keycloak-api-keys/express",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "scripts": {
-    "build": "tsup src/index.ts --format esm --dts",
-    "test": "vitest"
-  },
-  "peerDependencies": {
-    "express": "^4.18.0 || ^5.0.0"
-  }
-}
-```
-
-### 11.4 Testing Strategy
-
-#### Unit Tests
-Standard JUnit 5 tests for business logic, validators, mappers.
-
-```kotlin
-// spi/src/test/kotlin/pl/emdzej/keycloak/apikeys/ApiKeyHasherTest.kt
-class ApiKeyHasherTest {
-    @Test
-    fun `should hash key with SHA-256`() {
-        val hash = ApiKeyHasher.hash("mk_live_abc123...")
-        assertNotNull(hash)
-        assertEquals(64, hash.length) // SHA-256 hex
-    }
-}
-```
-
-#### E2E Tests (Testcontainers)
-Full integration tests with real Keycloak instance.
-
-```kotlin
-// spi/src/test/kotlin/pl/emdzej/keycloak/apikeys/ApiKeyE2ETest.kt
-@Testcontainers
-class ApiKeyE2ETest {
-
-    companion object {
-        @Container
-        val keycloak = KeycloakContainer("quay.io/keycloak/keycloak:26.0.0")
-            .withProviderClassesFrom("build/libs") // Load our SPI JAR
-            .withRealmImportFile("test-realm.json")
-    }
-
-    @Test
-    fun `should create API key and exchange for token`() {
-        val client = keycloak.createAdminClient()
-        
-        // Create API key via REST API
-        val response = client.target(keycloak.authServerUrl)
-            .path("/realms/test/account/api-keys")
-            .request()
-            .header("Authorization", "Bearer ${getUserToken()}")
-            .post(Entity.json(mapOf(
-                "name" to "test-key",
-                "clientId" to "my-app"
-            )))
-        
-        assertEquals(201, response.status)
-        val apiKey = response.readEntity(Map::class.java)["key"] as String
-        
-        // Exchange API key for JWT
-        val tokenResponse = client.target(keycloak.authServerUrl)
-            .path("/realms/test/protocol/openid-connect/token")
-            .request()
-            .post(Entity.form(Form()
-                .param("grant_type", "urn:ietf:params:oauth:grant-type:api-key")
-                .param("api_key", apiKey)
-                .param("client_id", "my-app")
-            ))
-        
-        assertEquals(200, tokenResponse.status)
-        val jwt = tokenResponse.readEntity(Map::class.java)["access_token"]
-        assertNotNull(jwt)
-    }
-
-    @Test
-    fun `should reject revoked API key`() { ... }
-
-    @Test
-    fun `should enforce rate limits`() { ... }
-}
-```
-
-#### Test Commands
+### Build Commands
 
 ```bash
-# Unit tests only (fast)
-./gradlew :spi:test --tests '*Test' --exclude-tags e2e
+# Build SPI JAR for Keycloak
+./gradlew :spi:shadowJar
 
-# E2E tests only (requires Docker)
-./gradlew :spi:test --tests '*E2ETest'
+# Build all TypeScript packages
+pnpm build
 
-# All tests
+# Run tests
 ./gradlew :spi:test
-```
+pnpm test
 
-### 11.5 Build Commands
-
-```bash
-# Java/Kotlin (Gradle)
-./gradlew build                    # Build all Java modules
-./gradlew :spi:shadowJar          # Build SPI fat JAR for Keycloak
-./gradlew :packages:spring:build  # Build Spring integration
-
-# TypeScript (pnpm)
-pnpm install                       # Install all dependencies
-pnpm build                         # Build all TS packages
-pnpm --filter @keycloak-api-keys/express build  # Build single package
-
-# Full build
-./gradlew build && pnpm build
+# Run a demo
+pnpm --filter @emdzej/keycloak-api-keys-express-demo dev
+./gradlew :packages:spring-demo:bootRun
 ```
 
 ---
 
-## 12. Open Questions
+## Appendix: Configuration
 
-*Resolved decisions from initial design phase:*
+There is no global enable/disable flag, no default expiration, and no per-client key prefix
+in the current implementation. The only runtime configuration is rate limiting.
 
-1. ~~**Key rotation** — should we support automatic rotation with grace period?~~
-   → **Manual rotation on demand** (Phase 2+). User/admin can rotate key, old key invalidated immediately.
+### Rate Limit Attributes
 
-2. ~~**IP allowlist** — restrict key usage to specific IPs?~~
-   → **No.** Out of scope.
+Set on realm or client via custom attributes (Admin Console → Realm Settings / Clients → Attributes).
 
-3. ~~**Webhook notifications** — notify on key creation/revocation?~~
-   → **No.** Use Keycloak event listeners if needed.
+| Attribute | Description |
+|-----------|-------------|
+| `apiKeysRateLimitPerMinute` | Integer string, e.g. `"120"` |
+| `apiKeysRateLimitPerHour` | Integer string |
+| `apiKeysRateLimitPerDay` | Integer string |
+| `apiKeysRateLimitBurst` | Integer string |
 
-4. ~~**Service account keys** — special handling for service accounts?~~
-   → **No special handling.** Service accounts are users in Keycloak, so the mechanism works out-of-box. Not actively promoted since service accounts already have `client_credentials` grant.
-
----
-
-## 13. Appendix A: Configuration
-
-There is no global enable/disable flag, no default expiration, and no per-client key prefix configuration in the current implementation. The only runtime configuration is **rate limiting**, which is resolved in a three-level priority chain: per-key → per-client → per-realm → built-in defaults.
-
-### Rate Limit Defaults (built-in)
-
-| Limit | Default value |
-|-------|--------------|
-| Per minute | 60 |
-| Per hour | 1000 |
-| Per day | 10000 |
-| Burst | 10 |
-
-### Realm-level Rate Limits
-
-Set via Keycloak realm custom attributes (Admin Console → Realm Settings → Attributes):
-
-| Attribute | Type | Example |
-|-----------|------|---------|
-| `apiKeysRateLimitPerMinute` | integer string | `"120"` |
-| `apiKeysRateLimitPerHour` | integer string | `"2000"` |
-| `apiKeysRateLimitPerDay` | integer string | `"20000"` |
-| `apiKeysRateLimitBurst` | integer string | `"20"` |
-
-Alternatively, set all four in one JSON blob under `apiKeysRateLimits`:
+All four can also be set as a single JSON blob in `apiKeysRateLimits`:
 
 ```json
 { "perMinute": 120, "perHour": 2000, "perDay": 20000, "burst": 20 }
 ```
 
-### Client-level Rate Limits
-
-Same attribute names on the **client** (Admin Console → Clients → {client} → Attributes). Client-level overrides realm-level.
-
-### Per-key Rate Limits
-
-Set in the `rateLimitConfigJson` field when creating an API key:
-
-```json
-{ "perMinute": 10, "perHour": 100, "perDay": 1000, "burst": 3 }
-```
-
-Per-key config overrides both client and realm level.
-
-### Resolution Order
-
-```
-per-key → client → realm → built-in defaults
-```
-
-The first non-null value found for each field wins. Partial overrides are supported — e.g. setting only `perMinute` at the realm level while leaving the others at their built-in defaults.
+Client-level attributes override realm-level. Per-key `rateLimitConfigJson` overrides both.
+The first non-null value per field wins; partial overrides are supported.

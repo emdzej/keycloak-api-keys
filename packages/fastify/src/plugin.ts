@@ -98,6 +98,6 @@ function forwardRateLimitHeaders(reply: FastifyReply, headers: Headers) {
 }
 
 export const keycloakApiKeyPlugin = fp(keycloakApiKeyPluginImpl, {
-  name: '@keycloak-api-keys/fastify',
+  name: '@emdzej/keycloak-api-keys-fastify',
   fastify: '5.x'
 });

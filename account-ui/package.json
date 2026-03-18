@@ -1,5 +1,5 @@
 {
-  "name": "@keycloak-api-keys/account-ui",
+  "name": "@emdzej/keycloak-api-keys-account-ui",
   "version": "0.1.0",
   "private": true,
   "scripts": {

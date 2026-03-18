@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { keycloakApiKeyPlugin } from "@keycloak-api-keys/fastify";
+import { keycloakApiKeyPlugin } from "@emdzej/keycloak-api-keys-fastify";
 
 const server = Fastify({ logger: true });
 

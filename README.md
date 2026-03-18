@@ -25,12 +25,7 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 ## Documentation
 
 - [Specification](docs/SPEC.md)
-- [Architecture](docs/ARCHITECTURE.md)
 - [API Reference](docs/API.md)
-
-## Status
-
-✅ **Design Complete** — ready for implementation
 
 ## Local Development
 
@@ -230,17 +225,17 @@ All demos read configuration from environment variables. The defaults point to `
 
 **Express** (port 3001):
 ```bash
-pnpm --filter @keycloak-api-keys/express-demo dev
+pnpm --filter @emdzej/keycloak-api-keys-express-demo dev
 ```
 
 **Fastify** (port 3002):
 ```bash
-pnpm --filter @keycloak-api-keys/fastify-demo dev
+pnpm --filter @emdzej/keycloak-api-keys-fastify-demo dev
 ```
 
 **Hono** (port 3003):
 ```bash
-pnpm --filter @keycloak-api-keys/hono-demo dev
+pnpm --filter @emdzej/keycloak-api-keys-hono-demo dev
 ```
 
 **Spring Boot** (port 3004):
@@ -253,10 +248,10 @@ To override the Keycloak connection for any Node.js demo:
 KEYCLOAK_URL=https://keycloak.example.com \
 KEYCLOAK_REALM=myrealm \
 CLIENT_ID=myclient \
-pnpm --filter @keycloak-api-keys/express-demo dev
+pnpm --filter @emdzej/keycloak-api-keys-express-demo dev
 ```
 
-For Spring Boot, edit `packages/spring-demo/src/main/resources/application.properties`.
+For Spring Boot, set the same env variables (`KEYCLOAK_URL`, `KEYCLOAK_REALM`, `CLIENT_ID`, `CLIENT_SECRET`, `PORT`) or edit `packages/spring-demo/src/main/resources/application.yml` directly.
 
 ### Testing a protected endpoint
 
@@ -279,7 +274,9 @@ curl -X POST http://localhost:3001/api/echo \
 
 Replace `3001` with `3002` (Fastify), `3003` (Hono), or `3004` (Spring Boot) as needed. The response from `/api/profile` shows the claims from the exchanged token, including `apiKeyId`, `sub`, and the roles restricted to what the key was granted.
 
-### Environment variables (Node.js demos)
+### Environment variables
+
+All four demos share the same environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -287,7 +284,7 @@ Replace `3001` with `3002` (Fastify), `3003` (Hono), or `3004` (Spring Boot) as 
 | `KEYCLOAK_REALM` | `master` | Realm name |
 | `CLIENT_ID` | `admin-cli` | OAuth2 client ID |
 | `CLIENT_SECRET` | — | Client secret (omit for public clients) |
-| `PORT` | `3001` / `3002` / `3003` | HTTP port |
+| `PORT` | `3001` / `3002` / `3003` / `3004` | HTTP port |
 
 ## License
 

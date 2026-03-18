@@ -1,8 +1,0 @@
-{
-  "themes": [
-    {
-      "name": "api-keys",
-      "types": ["account"]
-    }
-  ]
-}

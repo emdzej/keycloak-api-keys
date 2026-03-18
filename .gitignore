@@ -22,5 +22,11 @@ node_modules/
 .settings/
 
 .project
+.factorypath
+.classpath
 
-bin/.idea/
+bin/
+
+.idea/
+
+.vscode/

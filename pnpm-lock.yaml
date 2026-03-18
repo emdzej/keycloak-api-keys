@@ -69,7 +69,7 @@ importers:
 
   packages/express-demo:
     dependencies:
-      '@keycloak-api-keys/express':
+      '@emdzej/keycloak-api-keys-express':
         specifier: workspace:*
         version: link:../express
       express:
@@ -113,7 +113,7 @@ importers:
 
   packages/fastify-demo:
     dependencies:
-      '@keycloak-api-keys/fastify':
+      '@emdzej/keycloak-api-keys-fastify':
         specifier: workspace:*
         version: link:../fastify
       fastify:
@@ -147,12 +147,12 @@ importers:
 
   packages/hono-demo:
     dependencies:
+      '@emdzej/keycloak-api-keys-hono':
+        specifier: workspace:*
+        version: link:../hono
       '@hono/node-server':
         specifier: ^1.0.0
         version: 1.19.11(hono@4.12.8)
-      '@keycloak-api-keys/hono':
-        specifier: workspace:*
-        version: link:../hono
       hono:
         specifier: ^4.0.0
         version: 4.12.8

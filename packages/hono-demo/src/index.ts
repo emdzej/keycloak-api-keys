@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import { keycloakApiKey } from "@keycloak-api-keys/hono";
+import { keycloakApiKey } from "@emdzej/keycloak-api-keys-hono";
 
 const app = new Hono();
 
