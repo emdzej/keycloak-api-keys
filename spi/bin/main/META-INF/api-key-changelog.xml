@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+    <changeSet id="api-key-1.0" author="keycloak-api-keys">
+        <createTable tableName="api_key">
+            <column name="id" type="VARCHAR(36)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="key_hash" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="key_prefix" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="VARCHAR(36)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="client_id" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="realm_id" type="VARCHAR(36)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP"/>
+            <column name="revoked_at" type="TIMESTAMP"/>
+            <column name="created_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_used_at" type="TIMESTAMP"/>
+            <column name="last_used_ip" type="VARCHAR(45)"/>
+            <column name="usage_count" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rate_limit_config" type="TEXT"/>
+        </createTable>
+
+        <createTable tableName="api_key_roles">
+            <column name="api_key_id" type="VARCHAR(36)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="roles" type="VARCHAR(255)"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="api_key_roles"
+                                 baseColumnNames="api_key_id"
+                                 constraintName="fk_api_key_roles"
+                                 referencedTableName="api_key"
+                                 referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+
+        <createTable tableName="api_key_scopes">
+            <column name="api_key_id" type="VARCHAR(36)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scopes" type="VARCHAR(255)"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="api_key_scopes"
+                                 baseColumnNames="api_key_id"
+                                 constraintName="fk_api_key_scopes"
+                                 referencedTableName="api_key"
+                                 referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+
+        <createIndex tableName="api_key" indexName="idx_api_key_user">
+            <column name="realm_id"/>
+            <column name="user_id"/>
+        </createIndex>
+
+        <createIndex tableName="api_key" indexName="idx_api_key_realm">
+            <column name="realm_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

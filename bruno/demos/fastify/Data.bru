@@ -1,0 +1,20 @@
+meta {
+  name: Data
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{fastifyUrl}}/api/data
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-API-Key: {{apiKey}}
+}
+
+docs {
+  Returns a sample list of items. Requires a valid API key.
+}

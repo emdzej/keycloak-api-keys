@@ -43,7 +43,9 @@ async function keycloakApiKeyPluginImpl(
   fastify.decorateRequest('auth', undefined as AuthInfo | undefined);
 
   fastify.addHook('preHandler', async (request, reply) => {
-    if (!shouldProtectRoute(request.url, prefix)) {
+    // Strip query string before prefix check
+    const pathname = request.url.split('?')[0] ?? request.url;
+    if (!shouldProtectRoute(pathname, prefix)) {
       return;
     }
 

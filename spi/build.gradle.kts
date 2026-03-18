@@ -30,6 +30,11 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.keycloak:keycloak-core:$keycloakVersion")
+    testImplementation("org.keycloak:keycloak-server-spi:$keycloakVersion")
+    testImplementation("org.keycloak:keycloak-server-spi-private:$keycloakVersion")
+    testImplementation("org.keycloak:keycloak-services:$keycloakVersion")
     testImplementation("com.github.dasniko:testcontainers-keycloak:$testcontainersKeycloakVersion")
 }
 

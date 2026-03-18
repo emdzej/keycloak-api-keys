@@ -3,13 +3,9 @@ package pl.emdzej.keycloak.apikeys.protocol;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OAuthErrorException;
 import org.keycloak.events.Details;
@@ -17,7 +13,6 @@ import org.keycloak.events.Errors;
 import org.keycloak.events.EventType;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.ClientSessionContext;
-import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
@@ -153,7 +148,11 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
             return cors.add(builder);
         }
 
-        String scope = buildAllowedScope(apiKey, client);
+        // Compute the scope string to pass into the auth session.
+        // This drives setClientScopesInSession → getRequestedClientScopes, which resolves
+        // default scopes + any optional scopes the API key was granted, respecting client config.
+        // We pass only the scopes the API key is allowed; defaults are always included by Keycloak.
+        String scopeParam = ApiKeyTokenHelper.buildScopeParam(apiKey, client);
 
         RootAuthenticationSessionModel rootAuthSession = new AuthenticationSessionManager(session).createAuthenticationSession(realm, false);
         AuthenticationSessionModel authSession = rootAuthSession.createAuthenticationSession(client);
@@ -161,8 +160,12 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         authSession.setAuthenticatedUser(user);
         authSession.setProtocol(OIDCLoginProtocol.LOGIN_PROTOCOL);
         authSession.setClientNote(OIDCLoginProtocol.ISSUER, Urls.realmIssuer(session.getContext().getUri().getBaseUri(), realm.getName()));
-        authSession.setClientNote(OIDCLoginProtocol.SCOPE_PARAM, scope);
+        // Setting SCOPE_PARAM here feeds into setClientScopesInSession → all protocol mappers
+        // for the selected scopes will run, honouring any custom claim mappers on the client.
+        authSession.setClientNote(OIDCLoginProtocol.SCOPE_PARAM, scopeParam);
 
+        // Resolves effective scopes (defaults always included, optional only if in scopeParam)
+        // and writes them onto the auth session so TokenManager uses them during mapper execution.
         AuthenticationManager.setClientScopesInSession(session, authSession);
 
         UserSessionModel userSession = new UserSessionManager(session).createUserSession(
@@ -182,17 +185,31 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         ClientSessionContext clientSessionCtx = TokenManager.attachAuthenticationSession(session, userSession, authSession);
         updateUserSessionFromClientAuth(userSession);
 
+        // generateAccessToken runs the full mapper pipeline (protocol mappers, role mappers,
+        // custom claim mappers) for exactly the scopes resolved above.
         TokenManager.AccessTokenResponseBuilder responseBuilder = tokenManager
             .responseBuilder(realm, client, event, session, userSession, clientSessionCtx)
             .generateAccessToken();
 
         AccessToken accessToken = responseBuilder.getAccessToken();
+
+        // Tag the token with the API key id — added after mapper execution so no mapper
+        // interferes with this claim.
         accessToken.getOtherClaims().put("api_key_id", apiKey.getId());
-        accessToken.setScope(scope);
-        restrictRoles(accessToken, apiKey, user, client);
+
+        // Filter the mapper-produced roles down to only what the API key was granted.
+        // We never add roles — we only remove ones the mapper put in that exceed the API key's
+        // grant. If the API key has no role restriction, we leave the mapper output intact.
+        ApiKeyTokenHelper.restrictRoles(accessToken, apiKey);
+
+        // Use the scope string that Keycloak actually resolved (from clientSessionCtx),
+        // not our raw input — this keeps the response consistent with what mappers used.
+        String resolvedScope = clientSessionCtx.getScopeString();
 
         AccessTokenResponse res = responseBuilder.build();
-        res.setScope(scope);
+        res.setScope(resolvedScope);
+        accessToken.setScope(resolvedScope);
+        String scope = resolvedScope;
         event.detail(Details.SCOPE, scope);
         event.detail("api_key_event", "API_KEY_EXCHANGED");
         event.detail("api_key_id", apiKey.getId());
@@ -239,67 +256,6 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         builder.header("X-RateLimit-Limit", info.limit());
         builder.header("X-RateLimit-Remaining", info.remaining());
         builder.header("X-RateLimit-Reset", info.resetAt());
-    }
-
-    private String buildAllowedScope(ApiKeyEntity apiKey, ClientModel client) {
-        if (apiKey.getScopes().isEmpty()) {
-            return "";
-        }
-
-        Set<String> allowedScopes = new HashSet<>();
-        allowedScopes.addAll(client.getClientScopes(true).keySet());
-        allowedScopes.addAll(client.getClientScopes(false).keySet());
-
-        return apiKey.getScopes().stream()
-            .filter(allowedScopes::contains)
-            .sorted()
-            .collect(Collectors.joining(" "));
-    }
-
-    private void restrictRoles(AccessToken accessToken, ApiKeyEntity apiKey, UserModel user, ClientModel client) {
-        if (apiKey.getRoles().isEmpty()) {
-            accessToken.setRealmAccess(null);
-            accessToken.setResourceAccess(null);
-            return;
-        }
-
-        Set<String> allowedRealmRoles = new HashSet<>();
-        Set<String> allowedClientRoles = new HashSet<>();
-
-        for (String roleName : apiKey.getRoles()) {
-            if (roleName == null || roleName.isBlank()) {
-                continue;
-            }
-            RoleModel role = client.getRole(roleName);
-            if (role != null) {
-                if (user.hasRole(role)) {
-                    allowedClientRoles.add(role.getName());
-                }
-                continue;
-            }
-            RoleModel realmRole = realm.getRole(roleName);
-            if (realmRole != null && user.hasRole(realmRole)) {
-                allowedRealmRoles.add(realmRole.getName());
-            }
-        }
-
-        if (!allowedRealmRoles.isEmpty()) {
-            AccessToken.Access realmAccess = new AccessToken.Access();
-            allowedRealmRoles.forEach(realmAccess::addRole);
-            accessToken.setRealmAccess(realmAccess);
-        } else {
-            accessToken.setRealmAccess(null);
-        }
-
-        if (!allowedClientRoles.isEmpty()) {
-            AccessToken.Access clientAccess = new AccessToken.Access();
-            allowedClientRoles.forEach(clientAccess::addRole);
-            Map<String, AccessToken.Access> resourceAccess = new HashMap<>();
-            resourceAccess.put(client.getClientId(), clientAccess);
-            accessToken.setResourceAccess(resourceAccess);
-        } else {
-            accessToken.setResourceAccess(null);
-        }
     }
 
     private ApiKeyMetrics resolveMetrics() {

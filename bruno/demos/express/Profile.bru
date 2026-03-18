@@ -1,0 +1,29 @@
+meta {
+  name: Profile
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{expressUrl}}/api/profile
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-API-Key: {{apiKey}}
+}
+
+docs {
+  Returns the JWT claims from the token exchanged for the API key.
+  
+  Set the `apiKey` environment variable to a valid API key before calling.
+  
+  Returns:
+  - `user.sub` - Keycloak user ID
+  - `user.azp` - authorized client
+  - `user.apiKeyId` - the API key ID
+  - `user.scope` - granted scopes
+  - `user.roles` - granted realm roles
+}

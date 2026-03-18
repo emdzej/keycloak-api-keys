@@ -12,7 +12,7 @@ function createJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.`;
 }
 
-async function startServer() {
+async function createServer() {
   const fastify = Fastify();
 
   await fastify.register(keycloakApiKeyPlugin, {
@@ -30,6 +30,13 @@ async function startServer() {
     return { ok: true };
   });
 
+  await fastify.ready();
+
+  return fastify;
+}
+
+async function startServer() {
+  const fastify = await createServer();
   await fastify.listen({ port: 0, host: '127.0.0.1' });
 
   const address = fastify.server.address();
@@ -38,6 +45,7 @@ async function startServer() {
   }
 
   return {
+    fastify,
     url: `http://127.0.0.1:${address.port}`,
     close: () => fastify.close()
   };
@@ -154,8 +162,9 @@ describe('keycloakApiKeyPlugin', () => {
       throw new Error('Fetch should not be called');
     }));
 
-    const response = await fetch(`${server.url}/public`);
-    expect(response.status).toBe(200);
+    // Use fastify.inject so we don't use the global fetch that's been stubbed
+    const response = await server.fastify.inject({ method: 'GET', url: '/public' });
+    expect(response.statusCode).toBe(200);
 
     await server.close();
   });

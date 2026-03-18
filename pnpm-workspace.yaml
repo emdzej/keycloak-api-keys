@@ -2,3 +2,4 @@ packages:
   - 'account-ui'
   - 'packages/*'
   - '!packages/spring'
+  - '!packages/spring-demo'
