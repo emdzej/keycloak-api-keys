@@ -66,6 +66,119 @@ Keycloak will be available at http://localhost:8080
 
 For UI changes, the build output goes directly to theme resources, so just rebuild and refresh the browser.
 
+## How It Works
+
+### Middleware Request Flow
+
+Every inbound request to a protected route goes through the following steps:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Middleware
+    participant Ca as Token Cache
+    participant K as Keycloak
+    participant R as Route Handler
+
+    C->>M: Request + X-API-Key header
+
+    alt No X-API-Key header
+        M-->>C: 401 Unauthorized
+    else Key present
+        M->>Ca: get(apiKey)
+        alt Cache hit
+            Ca-->>M: AuthInfo (cached JWT claims)
+        else Cache miss
+            Ca-->>M: undefined
+            M->>K: POST /realms/{realm}/protocol/openid-connect/token<br/>grant_type=api-key, api_key=..., client_id=...
+            alt Invalid key / client error
+                K-->>M: 400 / 401
+                M-->>C: 401 Unauthorized
+            else Rate limit exceeded
+                K-->>M: 429 + X-RateLimit-* headers
+                M-->>C: 429 Too Many Requests + X-RateLimit-* headers
+            else Exchange successful
+                K-->>M: 200 access_token (JWT)
+                M->>M: Decode JWT payload
+                M->>Ca: set(apiKey, AuthInfo, ttl=min(cacheTtl, token.expires_in))
+            end
+        end
+        M->>R: next() with req.auth = AuthInfo
+        R-->>C: 200 Response
+    end
+```
+
+### Keycloak Token Exchange Flow
+
+When the middleware calls Keycloak to exchange an API key, the following happens inside the Keycloak SPI:
+
+```mermaid
+sequenceDiagram
+    participant M as Middleware
+    participant T as Token Endpoint
+    participant G as ApiKeyGrantType
+    participant DB as Database
+    participant TM as Token Manager
+
+    M->>T: POST /token grant_type=api-key
+
+    T->>T: Authenticate OAuth2 client<br/>(public: client_id only,<br/>confidential: + client_secret)
+    alt Client auth fails
+        T-->>M: 401 invalid_client
+    end
+
+    T->>G: process(context)
+
+    G->>G: SHA-256 hash of api_key value
+    G->>DB: SELECT WHERE key_hash = ?
+    alt Not found / wrong realm
+        G-->>M: 400 invalid_grant
+    end
+
+    alt Key revoked
+        G-->>M: 400 invalid_grant
+    else Key expired
+        G->>G: Publish ApiKeyExpiredRejectedEvent
+        G-->>M: 400 invalid_grant
+    end
+
+    alt client_id mismatch
+        G-->>M: 401 invalid_client
+    end
+
+    G->>DB: Load user by userId
+    alt User not found or disabled
+        G-->>M: 400 invalid_grant
+    end
+
+    G->>G: Check rate limit (per-key → client → realm → defaults)
+    alt Rate limit exceeded
+        G-->>M: 429 + X-RateLimit-* headers
+    end
+
+    G->>TM: Build auth session with allowed scopes
+    G->>TM: generateAccessToken()<br/>(runs all protocol mappers)
+    G->>G: Filter realm_access roles to API key grants
+    G->>G: Filter resource_access roles to API key grants
+    G->>DB: Update last_used_at, usage_count
+    G->>G: Add api_key_id claim, record metrics
+
+    G-->>M: 200 access_token (JWT) + X-RateLimit-* headers
+```
+
+### Token Claims
+
+The JWT returned by the exchange contains the standard Keycloak claims plus:
+
+| Claim | Value |
+|-------|-------|
+| `sub` | User ID (key owner) |
+| `azp` | Client ID the key is bound to |
+| `api_key_id` | ID of the API key used |
+| `scope` | Intersection of key scopes and client scopes resolved by Keycloak's mapper pipeline |
+| `realm_access.roles` | Intersection of mapper-produced roles and API key's granted roles |
+| `resource_access` | Same intersection for client roles |
+
 ## Demo Applications
 
 Each middleware package has a companion demo app that shows a working API protected by API key authentication. All demos expose the same four endpoints:
