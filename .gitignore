@@ -23,4 +23,4 @@ node_modules/
 
 .project
 
-bin/
+bin/.idea/
