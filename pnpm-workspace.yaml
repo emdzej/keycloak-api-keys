@@ -1,5 +1,4 @@
 packages:
   - 'account-ui'
-  - 'admin-ui'
   - 'packages/*'
   - '!packages/spring'
