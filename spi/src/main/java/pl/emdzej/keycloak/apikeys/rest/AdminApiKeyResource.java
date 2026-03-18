@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
+import org.keycloak.services.resources.admin.fgap.AdminPermissionEvaluator;
 import pl.emdzej.keycloak.apikeys.ApiKeyService;
 import pl.emdzej.keycloak.apikeys.dto.AdminApiKeyResponse;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreateRequest;
@@ -33,10 +34,14 @@ import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 @Produces(MediaType.APPLICATION_JSON)
 public class AdminApiKeyResource {
     private final KeycloakSession session;
+    private final RealmModel realm;
+    private final AdminPermissionEvaluator auth;
     private final ApiKeyService apiKeyService;
 
-    public AdminApiKeyResource(KeycloakSession session) {
+    public AdminApiKeyResource(KeycloakSession session, RealmModel realm, AdminPermissionEvaluator auth) {
         this.session = session;
+        this.realm = realm;
+        this.auth = auth;
         this.apiKeyService = new ApiKeyService(session);
     }
 
@@ -44,11 +49,9 @@ public class AdminApiKeyResource {
     public List<AdminApiKeyResponse> list(@QueryParam("userId") String userId,
                                           @QueryParam("clientId") String clientId,
                                           @QueryParam("status") String status) {
-        AdminAuth auth = new AdminAuth(session);
-        auth.requireViewApiKeys();
+        auth.realm().requireViewRealm();
 
         Boolean active = parseStatus(status);
-        RealmModel realm = session.getContext().getRealm();
 
         return apiKeyService.findByRealm(realm, userId, clientId, active)
             .stream()
@@ -59,10 +62,8 @@ public class AdminApiKeyResource {
     @GET
     @Path("{keyId}/stats")
     public ApiKeyStatsResponse stats(@PathParam("keyId") String keyId) {
-        AdminAuth auth = new AdminAuth(session);
-        auth.requireViewApiKeys();
+        auth.realm().requireViewRealm();
 
-        RealmModel realm = session.getContext().getRealm();
         ApiKeyEntity entity = apiKeyService.getStats(realm, keyId);
         if (entity == null) {
             throw new NotFoundException("API key not found");
@@ -78,8 +79,7 @@ public class AdminApiKeyResource {
     @GET
     @Path("health")
     public Response health() {
-        AdminAuth auth = new AdminAuth(session);
-        auth.requireViewApiKeys();
+        auth.realm().requireViewRealm();
 
         RateLimiterProvider provider = session.getProvider(RateLimiterProvider.class);
         RateLimiter rateLimiter = provider != null ? provider.getRateLimiter() : null;
@@ -95,16 +95,14 @@ public class AdminApiKeyResource {
     @POST
     @Path("users/{userId}/api-keys")
     public Response createForUser(@PathParam("userId") String userId, ApiKeyCreateRequest request) {
-        AdminAuth auth = new AdminAuth(session);
-        auth.requireManageApiKeys();
+        auth.realm().requireManageRealm();
 
-        RealmModel realm = session.getContext().getRealm();
         UserModel user = session.users().getUserById(realm, userId);
         if (user == null) {
             throw new NotFoundException("User not found");
         }
 
-        ApiKeyService.CreatedApiKey created = apiKeyService.createForUser(realm, user, request, auth.getUser());
+        ApiKeyService.CreatedApiKey created = apiKeyService.createForUser(realm, user, request, auth.adminAuth().getUser());
         ApiKeyCreatedResponse response = toCreatedResponse(created);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
@@ -112,11 +110,9 @@ public class AdminApiKeyResource {
     @DELETE
     @Path("{keyId}")
     public Response revoke(@PathParam("keyId") String keyId) {
-        AdminAuth auth = new AdminAuth(session);
-        auth.requireManageApiKeys();
+        auth.realm().requireManageRealm();
 
-        RealmModel realm = session.getContext().getRealm();
-        apiKeyService.revokeKey(realm, keyId, auth.getUser());
+        apiKeyService.revokeKey(realm, keyId, auth.adminAuth().getUser());
         return Response.noContent().build();
     }
 
