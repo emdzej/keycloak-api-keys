@@ -3,14 +3,14 @@ package pl.emdzej.keycloak.apikeys.rest;
 import org.keycloak.Config;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
-import org.keycloak.services.resource.RealmResourceProvider;
-import org.keycloak.services.resource.RealmResourceProviderFactory;
+import org.keycloak.services.resources.admin.ext.AdminRealmResourceProvider;
+import org.keycloak.services.resources.admin.ext.AdminRealmResourceProviderFactory;
 
-public class AdminApiKeyResourceProviderFactory implements RealmResourceProviderFactory {
+public class AdminApiKeyResourceProviderFactory implements AdminRealmResourceProviderFactory {
     public static final String ID = "api-keys";
 
     @Override
-    public RealmResourceProvider create(KeycloakSession session) {
+    public AdminRealmResourceProvider create(KeycloakSession session) {
         return new AdminApiKeyResourceProvider(session);
     }
 
