@@ -1,0 +1,36 @@
+meta {
+  name: Exchange API Key for Token
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  grant_type: urn:ietf:params:oauth:grant-type:api-key
+  client_id: {{clientId}}
+  api_key: {{apiKey}}
+}
+
+vars:pre-request {
+  apiKey: 
+}
+
+docs {
+  Exchange an API key for a JWT access token.
+  
+  Set `apiKey` variable to the full API key (e.g., `cli_abc123...`).
+  
+  Response includes:
+  - `access_token` - JWT token
+  - `expires_in` - token lifetime in seconds
+  - `token_type` - Bearer
+}

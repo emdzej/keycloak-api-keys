@@ -1,0 +1,24 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/admin/realms/{{realm}}/api-keys/health
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  Health check endpoint for API Keys extension.
+  
+  Returns:
+  - `status` - UP/DOWN
+  - `keysCount` - total API keys in realm
+  - `cacheStatus` - rate limiter cache status
+}

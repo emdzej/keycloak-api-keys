@@ -1,0 +1,30 @@
+meta {
+  name: List All API Keys
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/realms/{{realm}}/api-keys
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~userId: 
+  ~clientId: 
+  ~status: active
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  List all API keys in the realm.
+  
+  Optional filters:
+  - `userId` - filter by user ID
+  - `clientId` - filter by client ID
+  - `status` - `active` or `revoked`
+}
