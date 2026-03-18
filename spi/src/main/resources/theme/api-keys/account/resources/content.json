@@ -20,7 +20,7 @@
   },
   {
     "label": "apiKeys",
-    "path": "api-keys",
-    "modulePath": "/api-keys.js"
+    "path": "content/api-keys",
+    "modulePath": "/content/api-keys.js"
   }
 ]
