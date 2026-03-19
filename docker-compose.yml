@@ -27,6 +27,10 @@ services:
       KC_METRICS_ENABLED: "true"
     volumes:
       - ./spi/build/libs/keycloak-api-keys-all.jar:/opt/keycloak/providers/api-keys.jar:ro
+      # Mount theme sources directly so JS/CSS changes are picked up on browser
+      # refresh without rebuilding the JAR or restarting Keycloak (dev watch mode).
+      # File-system themes take precedence over JAR-bundled themes of the same name.
+      - ./spi/src/main/resources/theme/api-keys:/opt/keycloak/themes/api-keys:ro
     ports:
       - "8080:8080"
       - "9000:9000"

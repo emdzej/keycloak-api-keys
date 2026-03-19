@@ -60,11 +60,36 @@ Keycloak will be available at http://localhost:8080
 
 ### Development Workflow
 
-1. Make changes to SPI code (spi/src/...)
-2. Run `./scripts/build.sh`
-3. Restart Keycloak: `docker compose -f docker-compose.dev.yml restart keycloak`
+#### SPI (Java)
 
-For UI changes, the build output goes directly to theme resources, so just rebuild and refresh the browser.
+Changes to the SPI require a JAR rebuild and Keycloak restart:
+
+```bash
+./gradlew :spi:shadowJar
+docker compose restart keycloak
+```
+
+#### Account Console UI (TypeScript)
+
+The theme directory is volume-mounted directly into Keycloak, so JS/CSS changes are
+served on the next browser refresh — no JAR rebuild or Keycloak restart needed.
+
+```bash
+pnpm --filter @emdzej/keycloak-api-keys-account-ui watch
+```
+
+Vite rebuilds `api-keys.js` into
+`spi/src/main/resources/theme/api-keys/account/resources/content/` on every save (~200 ms).
+Keycloak picks up the new file immediately. Refresh the Account Console in the browser to see changes.
+
+> The same output directory is used for production builds — `./gradlew :spi:shadowJar`
+> bundles whatever is in that directory into the JAR. No separate paths or extra steps.
+
+#### Middleware packages (TypeScript)
+
+```bash
+pnpm --filter @emdzej/keycloak-api-keys-express dev   # or fastify / hono
+```
 
 ## How It Works
 
