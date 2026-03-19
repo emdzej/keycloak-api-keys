@@ -1,0 +1,256 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>KeycloakApiKeyAuthentication</name>
+    </assembly>
+    <members>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyExtensions">
+            <summary>
+            Extension methods for registering Keycloak API key authentication in ASP.NET Core.
+            </summary>
+        </member>
+        <member name="F:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyExtensions.DefaultScheme">
+            <summary>Default scheme name used when none is specified.</summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyExtensions.AddKeycloakApiKeyAuthentication(Microsoft.AspNetCore.Authentication.AuthenticationBuilder,System.Action{EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions})">
+            <summary>
+            Adds Keycloak API key authentication using the default scheme name
+            (<c>KeycloakApiKey</c>) and configures options via a delegate.
+            </summary>
+            <example>
+            <code>
+            builder.Services.AddAuthentication()
+                .AddKeycloakApiKeyAuthentication(options =>
+                {
+                    options.ServerUrl  = "https://auth.example.com";
+                    options.Realm      = "my-realm";
+                    options.ClientId   = "my-app";
+                });
+            </code>
+            </example>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyExtensions.AddKeycloakApiKeyAuthentication(Microsoft.AspNetCore.Authentication.AuthenticationBuilder,System.String,System.Action{EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions})">
+            <summary>
+            Adds Keycloak API key authentication using a custom scheme name.
+            Use this overload when registering multiple authentication schemes.
+            </summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyHandler">
+            <summary>
+            ASP.NET Core authentication handler that validates API keys by exchanging them
+            for Keycloak access tokens and populating <see cref="T:System.Security.Claims.ClaimsPrincipal"/> from
+            the returned JWT claims.
+            </summary>
+        </member>
+        <member name="F:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyHandler.RateLimitHeaderNames">
+            <summary>
+            The name used to register rate-limit response headers when Keycloak returns 429.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyHandler.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions},Microsoft.Extensions.Logging.ILoggerFactory,System.Text.Encodings.Web.UrlEncoder,EmDzej.KeycloakApiKeyAuthentication.IKeycloakTokenExchangeClient,EmDzej.KeycloakApiKeyAuthentication.ITokenCache{EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo})">
+            <inheritdoc />
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyHandler.HandleAuthenticateAsync">
+            <inheritdoc />
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyHandler.HandleChallengeAsync(Microsoft.AspNetCore.Authentication.AuthenticationProperties)">
+            <inheritdoc />
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyHandler.HandleForbiddenAsync(Microsoft.AspNetCore.Authentication.AuthenticationProperties)">
+            <inheritdoc />
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions">
+            <summary>
+            Options for the Keycloak API key authentication handler.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.ServerUrl">
+            <summary>
+            Base URL of the Keycloak server — e.g. <c>https://auth.example.com</c>.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.Realm">
+            <summary>
+            Keycloak realm name.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.ClientId">
+            <summary>
+            Client ID used when exchanging API keys for tokens.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.ClientSecret">
+            <summary>
+            Optional client secret (required for confidential clients).
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.HeaderName">
+            <summary>
+            HTTP header the handler reads the API key from.
+            Defaults to <c>X-API-Key</c>.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.CacheTtlSeconds">
+            <summary>
+            How long (in seconds) a successfully exchanged token is cached.
+            The handler uses the smaller of this value and the token's own
+            <c>expires_in</c> field so the cache never outlives the token.
+            Defaults to 300 seconds (5 minutes).
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions.Validate">
+            <inheritdoc />
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.TokenExchangeResult">
+            <summary>
+            Result of a successful API key exchange.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.TokenExchangeResult.#ctor(EmDzej.KeycloakApiKeyAuthentication.TokenResponse,EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo)">
+            <summary>
+            Result of a successful API key exchange.
+            </summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.TokenResponse">
+            <summary>Raw Keycloak token endpoint response.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.TokenResponse.AccessToken">
+            <summary>The JWT access token.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.TokenResponse.ExpiresIn">
+            <summary>Token lifetime in seconds.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.TokenResponse.TokenType">
+            <summary>Token type, typically <c>Bearer</c>.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.TokenResponse.Scope">
+            <summary>Space-separated granted scopes.</summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo">
+            <summary>
+            Decoded claims from the Keycloak access token.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.Sub">
+            <summary>Subject (user ID).</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.Azp">
+            <summary>Authorized party (client ID the token was issued to).</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.ApiKeyId">
+            <summary>ID of the API key that was exchanged.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.PreferredUsername">
+            <summary>Preferred username.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.Email">
+            <summary>Email address.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.RealmAccess">
+            <summary>Realm-level role assignments.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.ResourceAccess">
+            <summary>Client-level role assignments keyed by client ID.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.Scope">
+            <summary>Space-separated list of granted scopes.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.Exp">
+            <summary>Token expiry as a Unix timestamp.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyClaimsInfo.AdditionalClaims">
+            <summary>Raw additional claims not covered by typed properties.</summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.RealmAccess">
+            <summary>Roles container used by both <c>realm_access</c> and <c>resource_access</c>.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.RealmAccess.Roles">
+            <summary>List of role names.</summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.IKeycloakTokenExchangeClient">
+            <summary>
+            Abstraction for the Keycloak token exchange operation.
+            Exposed publicly so consumers can substitute a test double or custom implementation.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.IKeycloakTokenExchangeClient.ExchangeAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Exchanges an API key for a Keycloak access token and decoded claims.</summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.KeycloakTokenExchangeClient">
+            <summary>
+            Exchanges API keys for Keycloak access tokens via the custom grant type.
+            Uses <see cref="T:System.Net.Http.IHttpClientFactory"/> so connections are properly pooled and
+            the handler lifecycle is managed by the DI container.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakTokenExchangeClient.#ctor(System.Net.Http.IHttpClientFactory,EmDzej.KeycloakApiKeyAuthentication.KeycloakApiKeyOptions)">
+            <summary>
+            Exchanges API keys for Keycloak access tokens via the custom grant type.
+            Uses <see cref="T:System.Net.Http.IHttpClientFactory"/> so connections are properly pooled and
+            the handler lifecycle is managed by the DI container.
+            </summary>
+        </member>
+        <member name="F:EmDzej.KeycloakApiKeyAuthentication.KeycloakTokenExchangeClient.HttpClientName">
+            <summary>Named HttpClient used by this handler (registered in DI by the extension method).</summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.KeycloakTokenExchangeClient.ExchangeAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Exchanges the raw API key value for a Keycloak access token and decoded claims.
+            </summary>
+            <exception cref="T:EmDzej.KeycloakApiKeyAuthentication.ApiKeyExchangeException">
+            Thrown when Keycloak returns a non-success response.
+            </exception>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.ApiKeyExchangeException">
+            <summary>
+            Thrown when the Keycloak token endpoint returns a non-success response.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.ApiKeyExchangeException.#ctor(System.String,System.Int32,System.Net.Http.Headers.HttpResponseHeaders)">
+            <summary>
+            Thrown when the Keycloak token endpoint returns a non-success response.
+            </summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyExchangeException.StatusCode">
+            <summary>HTTP status code returned by Keycloak.</summary>
+        </member>
+        <member name="P:EmDzej.KeycloakApiKeyAuthentication.ApiKeyExchangeException.ResponseHeaders">
+            <summary>Response headers from Keycloak (includes rate-limit headers on 429).</summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.ITokenCache`1">
+            <summary>
+            Abstraction for the API key claims cache.
+            Exposed publicly so consumers can substitute a custom implementation
+            (e.g. distributed cache) when registering the authentication handler.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.ITokenCache`1.Get(System.String)">
+            <summary>Returns a cached value, or <see langword="null"/> if missing or expired.</summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.ITokenCache`1.Set(System.String,`0,System.Int32)">
+            <summary>Stores a value with the given TTL in seconds.</summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.ITokenCache`1.Clear">
+            <summary>Removes all entries.</summary>
+        </member>
+        <member name="T:EmDzej.KeycloakApiKeyAuthentication.TokenCache`1">
+            <summary>
+            Thread-safe in-memory cache for exchanged token results.
+            Entries are evicted lazily on access once they expire.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.TokenCache`1.Get(System.String)">
+            <summary>
+            Retrieves a cached value, or <see langword="null"/> if missing or expired.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.TokenCache`1.Set(System.String,`0,System.Int32)">
+            <summary>
+            Stores a value with the given TTL in seconds. Zero or negative TTL is a no-op.
+            </summary>
+        </member>
+        <member name="M:EmDzej.KeycloakApiKeyAuthentication.TokenCache`1.Clear">
+            <summary>Removes all entries from the cache.</summary>
+        </member>
+    </members>
+</doc>

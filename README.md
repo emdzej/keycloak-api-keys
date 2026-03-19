@@ -8,21 +8,23 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 
 ## Components
 
-| Module | Description |
-|--------|-------------|
-| `keycloak-api-keys-spi` | Keycloak server extension (storage, REST API, token exchange) |
-| `keycloak-api-keys-account-ui` | Account Console UI extension for user self-service |
-| `keycloak-api-keys-admin-ui` | Admin Console UI extension for administrators |
-| `keycloak-api-keys-spring` | Spring MVC / servlet security integration |
-| `keycloak-api-keys-spring-webflux` | Spring WebFlux reactive security integration |
-| `keycloak-api-keys-express` | Express.js middleware |
-| `keycloak-api-keys-fastify` | Fastify plugin |
-| `keycloak-api-keys-hono` | Hono middleware (edge-ready) |
-| `express-demo` | Demo app — Express.js (port 3001) |
-| `fastify-demo` | Demo app — Fastify (port 3002) |
-| `hono-demo` | Demo app — Hono (port 3003) |
-| `spring-demo` | Demo app — Spring Boot MVC (port 3004) |
-| `spring-webflux-demo` | Demo app — Spring Boot WebFlux (port 3005) |
+| Module | Language | Description |
+|--------|----------|-------------|
+| `keycloak-api-keys-spi` | Java | Keycloak server extension (storage, REST API, token exchange) |
+| `keycloak-api-keys-account-ui` | TypeScript | Account Console UI extension for user self-service |
+| `keycloak-api-keys-admin-ui` | TypeScript | Admin Console UI extension for administrators |
+| `keycloak-api-keys-spring` | Java | Spring MVC / servlet security integration |
+| `keycloak-api-keys-spring-webflux` | Java | Spring WebFlux reactive security integration |
+| `keycloak-api-keys-express` | TypeScript | Express.js middleware |
+| `keycloak-api-keys-fastify` | TypeScript | Fastify plugin |
+| `keycloak-api-keys-hono` | TypeScript | Hono middleware (edge-ready) |
+| `EmDzej.KeycloakApiKeyAuthentication` | C# | ASP.NET Core authentication handler |
+| `express-demo` | TypeScript | Demo app — Express.js (port 3001) |
+| `fastify-demo` | TypeScript | Demo app — Fastify (port 3002) |
+| `hono-demo` | TypeScript | Demo app — Hono (port 3003) |
+| `spring-demo` | Java | Demo app — Spring Boot MVC (port 3004) |
+| `spring-webflux-demo` | Java | Demo app — Spring Boot WebFlux (port 3005) |
+| `KeycloakApiKeyAuthentication.Demo` | C# | Demo app — ASP.NET Core Minimal API (port 3006) |
 
 ## Documentation
 
@@ -35,6 +37,7 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 - Java 21
 - Node.js 22+
 - pnpm
+- .NET 10 SDK
 - Docker & Docker Compose
 
 ### Quick Start
@@ -126,7 +129,7 @@ sequenceDiagram
 
     T->>G: process(context)
 
-    G->>G: SHA-256 hash of api_key value
+    G->>G: HMAC-SHA-256 hash of api_key value (dual-hash lookup for legacy keys)
     G->>DB: SELECT WHERE key_hash = ?
     alt Not found / wrong realm
         G-->>M: 400 invalid_grant
@@ -250,6 +253,11 @@ pnpm --filter @emdzej/keycloak-api-keys-hono-demo dev
 ./gradlew :packages:spring-webflux-demo:bootRun
 ```
 
+**ASP.NET Core** (port 3006):
+```bash
+dotnet run --project packages/dotnet/demo/KeycloakApiKeyAuthentication.Demo
+```
+
 To override the Keycloak connection for any Node.js demo:
 ```bash
 KEYCLOAK_URL=https://keycloak.example.com \
@@ -259,6 +267,14 @@ pnpm --filter @emdzej/keycloak-api-keys-express-demo dev
 ```
 
 For Spring Boot (both MVC and WebFlux), set the same env variables (`KEYCLOAK_URL`, `KEYCLOAK_REALM`, `CLIENT_ID`, `CLIENT_SECRET`, `PORT`) or edit the respective `application.yml` directly.
+
+For ASP.NET Core, pass the same variables as environment variables or via the command line:
+```bash
+KEYCLOAK_URL=https://keycloak.example.com \
+KEYCLOAK_REALM=myrealm \
+CLIENT_ID=myclient \
+dotnet run --project packages/dotnet/demo/KeycloakApiKeyAuthentication.Demo
+```
 
 ### Testing a protected endpoint
 
@@ -279,7 +295,7 @@ curl -X POST http://localhost:3001/api/echo \
   -d '{"hello": "world"}'
 ```
 
-Replace `3001` with `3002` (Fastify), `3003` (Hono), `3004` (Spring MVC), or `3005` (Spring WebFlux) as needed. The response from `/api/profile` shows the claims from the exchanged token, including `apiKeyId`, `sub`, and the roles restricted to what the key was granted.
+Replace `3001` with `3002` (Fastify), `3003` (Hono), `3004` (Spring MVC), `3005` (Spring WebFlux), or `3006` (ASP.NET Core) as needed. The response from `/api/profile` shows the claims from the exchanged token, including `apiKeyId`, `sub`, and the roles restricted to what the key was granted.
 
 ### Environment variables
 
@@ -291,7 +307,7 @@ All five demos share the same environment variables:
 | `KEYCLOAK_REALM` | `master` | Realm name |
 | `CLIENT_ID` | `admin-cli` | OAuth2 client ID |
 | `CLIENT_SECRET` | — | Client secret (omit for public clients) |
-| `PORT` | `3001` / `3002` / `3003` / `3004` / `3005` | HTTP port |
+| `PORT` | `3001` / `3002` / `3003` / `3004` / `3005` / `3006` | HTTP port |
 
 ## License
 

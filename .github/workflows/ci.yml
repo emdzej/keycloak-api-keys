@@ -72,3 +72,30 @@ jobs:
           path: |
             packages/*/coverage/
           retention-days: 7
+
+  # ── .NET: ASP.NET Core authentication handler ────────────────────────────────
+  dotnet:
+    name: .NET build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Build
+        run: dotnet build packages/dotnet/KeycloakApiKeys.sln --configuration Release
+
+      - name: Test
+        run: dotnet test packages/dotnet/KeycloakApiKeys.sln --configuration Release --no-build \
+               --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: "**/*.trx"
+          retention-days: 7

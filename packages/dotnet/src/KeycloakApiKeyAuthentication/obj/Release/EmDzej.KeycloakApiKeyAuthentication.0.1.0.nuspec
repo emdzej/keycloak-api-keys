@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>EmDzej.KeycloakApiKeyAuthentication</id>
+    <version>0.1.0</version>
+    <title>Keycloak API Key Authentication for ASP.NET Core</title>
+    <authors>emdzej</authors>
+    <license type="expression">MIT</license>
+    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/emdzej/keycloak-api-keys</projectUrl>
+    <description>ASP.NET Core authentication handler that exchanges API keys for Keycloak JWTs, populating HttpContext.User so [Authorize] and policy-based auth work without extra wiring.</description>
+    <tags>keycloak api-key authentication aspnetcore middleware</tags>
+    <repository type="git" url="https://github.com/emdzej/keycloak-api-keys" commit="40206817d548a86e8dc9de0f23e2cdc8f0aaa239" />
+    <dependencies>
+      <group targetFramework="net10.0" />
+    </dependencies>
+    <frameworkReferences>
+      <group targetFramework="net10.0">
+        <frameworkReference name="Microsoft.AspNetCore.App" />
+      </group>
+    </frameworkReferences>
+  </metadata>
+  <files>
+    <file src="/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/bin/Release/net10.0/KeycloakApiKeyAuthentication.dll" target="lib/net10.0/KeycloakApiKeyAuthentication.dll" />
+    <file src="/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/bin/Release/net10.0/KeycloakApiKeyAuthentication.xml" target="lib/net10.0/KeycloakApiKeyAuthentication.xml" />
+    <file src="/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/README.md" target="/README.md" />
+  </files>
+</package>

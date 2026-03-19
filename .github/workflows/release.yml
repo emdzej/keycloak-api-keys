@@ -111,3 +111,37 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm publish --no-git-checks --access public
+
+  # ── .NET: build, test, publish to GitHub Packages NuGet ─────────────────────
+  publish-nuget:
+    name: Publish NuGet package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+          source-url: "https://nuget.pkg.github.com/emdzej/index.json"
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and test
+        run: dotnet test packages/dotnet/KeycloakApiKeys.sln --configuration Release
+
+      - name: Pack
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          dotnet pack packages/dotnet/src/KeycloakApiKeyAuthentication/KeycloakApiKeyAuthentication.csproj \
+            --configuration Release \
+            -p:Version="$VERSION" \
+            --output packages/dotnet/nupkg
+
+      - name: Publish to GitHub Packages NuGet
+        run: |
+          dotnet nuget push packages/dotnet/nupkg/*.nupkg \
+            --source "https://nuget.pkg.github.com/emdzej/index.json" \
+            --api-key ${{ secrets.GITHUB_TOKEN }} \
+            --skip-duplicate

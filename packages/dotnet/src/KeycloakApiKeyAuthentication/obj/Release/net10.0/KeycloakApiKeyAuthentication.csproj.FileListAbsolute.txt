@@ -1,0 +1,14 @@
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/bin/Release/net10.0/KeycloakApiKeyAuthentication.deps.json
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/bin/Release/net10.0/KeycloakApiKeyAuthentication.dll
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/bin/Release/net10.0/KeycloakApiKeyAuthentication.pdb
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/bin/Release/net10.0/KeycloakApiKeyAuthentication.xml
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.GeneratedMSBuildEditorConfig.editorconfig
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.AssemblyInfoInputs.cache
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.AssemblyInfo.cs
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.csproj.CoreCompileInputs.cache
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.sourcelink.json
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.dll
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/refint/KeycloakApiKeyAuthentication.dll
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.xml
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/KeycloakApiKeyAuthentication.pdb
+/Users/mjaskols/Projects/my/keycloak-api-keys/packages/dotnet/src/KeycloakApiKeyAuthentication/obj/Release/net10.0/ref/KeycloakApiKeyAuthentication.dll
