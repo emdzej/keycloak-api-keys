@@ -51,6 +51,9 @@ tasks.shadowJar {
     archiveVersion.set("")
     mergeServiceFiles()
     archiveBaseName.set("keycloak-api-keys")
+    // Exclude bundled Maven metadata from shaded dependencies so Maven tooling
+    // (including GitHub Packages) does not pick up Guava's pom.xml as our descriptor
+    exclude("META-INF/maven/**")
 }
 
 publishing {
