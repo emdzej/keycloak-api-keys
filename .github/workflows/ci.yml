@@ -89,8 +89,11 @@ jobs:
         run: dotnet build packages/dotnet/KeycloakApiKeys.sln --configuration Release
 
       - name: Test
-        run: dotnet test packages/dotnet/KeycloakApiKeys.sln --configuration Release --no-build \
-               --logger "trx;LogFileName=test-results.trx"
+        run: >-
+          dotnet test packages/dotnet/KeycloakApiKeys.sln 
+          --configuration Release 
+          --no-build 
+          --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results
         if: always()
