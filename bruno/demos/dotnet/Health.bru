@@ -1,0 +1,23 @@
+meta {
+  name: Health
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{dotnetUrl}}/health
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  Public health check — no API key required.
+  
+  Returns:
+  - `status` - ok
+  - `middleware` - aspnetcore
+}
