@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"]   # releases handled by release.yml
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Java: SPI + Spring packages ─────────────────────────────────────────────
+  java:
+    name: Java build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # axion-release needs full git history for version derivation
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Build and test (Gradle)
+        run: ./gradlew build test --no-daemon
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
+
+  # ── Node: Express / Fastify / Hono packages ─────────────────────────────────
+  node:
+    name: Node build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and test (Turborepo)
+        run: pnpm build && pnpm test
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-test-reports
+          path: |
+            packages/*/coverage/
+          retention-days: 7

@@ -17,3 +17,37 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test:6.5.0")
     testImplementation("io.projectreactor:reactor-test:3.7.5")
 }
+
+java {
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("springWebflux") {
+            from(components["java"])
+            artifactId = "keycloak-api-keys-spring-webflux"
+            pom {
+                name.set("Keycloak API Keys — Spring WebFlux")
+                description.set("Spring WebFlux integration for Keycloak API key authentication")
+                url.set("https://github.com/emdzej/keycloak-api-keys")
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/emdzej/keycloak-api-keys")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}

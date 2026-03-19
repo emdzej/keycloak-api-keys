@@ -16,3 +16,37 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test:$springBootVersion")
     testImplementation("org.springframework.security:spring-security-test:6.5.0")
 }
+
+java {
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("spring") {
+            from(components["java"])
+            artifactId = "keycloak-api-keys-spring"
+            pom {
+                name.set("Keycloak API Keys — Spring Boot")
+                description.set("Spring Boot integration for Keycloak API key authentication")
+                url.set("https://github.com/emdzej/keycloak-api-keys")
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/emdzej/keycloak-api-keys")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}

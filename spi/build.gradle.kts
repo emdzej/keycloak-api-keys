@@ -1,6 +1,7 @@
 plugins {
     java
     id("com.gradleup.shadow")
+    `maven-publish`
 }
 
 java {
@@ -50,4 +51,36 @@ tasks.shadowJar {
     archiveVersion.set("")
     mergeServiceFiles()
     archiveBaseName.set("keycloak-api-keys")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("spi") {
+            artifactId = "keycloak-api-keys-spi"
+            artifact(tasks.shadowJar) {
+                classifier = ""
+            }
+            pom {
+                name.set("Keycloak API Keys SPI")
+                description.set("Keycloak SPI that adds API key authentication support")
+                url.set("https://github.com/emdzej/keycloak-api-keys")
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/emdzej/keycloak-api-keys")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
 }
