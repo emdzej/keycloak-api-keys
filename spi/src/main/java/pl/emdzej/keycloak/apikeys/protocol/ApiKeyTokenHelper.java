@@ -43,7 +43,15 @@ class ApiKeyTokenHelper {
 
     /**
      * Filters the mapper-produced roles on the access token down to the intersection
-     * with the roles the API key was granted.
+     * with the roles the API key was granted, using fully-qualified role identifiers
+     * to prevent name-collision across namespaces (H5).
+     *
+     * <p>Roles stored in the API key are qualified:
+     * <ul>
+     *   <li>{@code "realm:<roleName>"} — matched against {@code realmAccess}</li>
+     *   <li>{@code "client:<clientId>:<roleName>"} — matched per {@code resourceAccess[clientId]}</li>
+     *   <li>Unqualified names (legacy, stored before H5) — matched against both for backward compat</li>
+     * </ul>
      *
      * <p>We never add roles — only remove ones that exceed the API key's grant.
      * If the API key has no role grants (empty set), all roles are stripped entirely.
@@ -55,15 +63,30 @@ class ApiKeyTokenHelper {
             return;
         }
 
-        Set<String> grantedRoles = apiKey.getRoles().stream()
-            .filter(r -> r != null && !r.isBlank())
-            .collect(Collectors.toSet());
+        // Partition grants into realm-scoped, client-scoped, and legacy unqualified
+        Set<String> realmGranted = new HashSet<>();
+        Map<String, Set<String>> clientGranted = new HashMap<>();
+        Set<String> legacyGranted = new HashSet<>(); // backward compat: unqualified names
 
-        // Filter realm access
+        for (String r : apiKey.getRoles()) {
+            if (r == null || r.isBlank()) continue;
+            if (r.startsWith("realm:")) {
+                realmGranted.add(r.substring("realm:".length()));
+            } else if (r.startsWith("client:")) {
+                String[] parts = r.split(":", 3);
+                if (parts.length == 3) {
+                    clientGranted.computeIfAbsent(parts[1], k -> new HashSet<>()).add(parts[2]);
+                }
+            } else {
+                legacyGranted.add(r); // stored before H5 migration
+            }
+        }
+
+        // Filter realm access — qualified "realm:" grants + legacy unqualified names
         AccessToken.Access existingRealmAccess = accessToken.getRealmAccess();
         if (existingRealmAccess != null && existingRealmAccess.getRoles() != null) {
             Set<String> filtered = existingRealmAccess.getRoles().stream()
-                .filter(grantedRoles::contains)
+                .filter(role -> realmGranted.contains(role) || legacyGranted.contains(role))
                 .collect(Collectors.toSet());
             if (filtered.isEmpty()) {
                 accessToken.setRealmAccess(null);
@@ -74,19 +97,21 @@ class ApiKeyTokenHelper {
             }
         }
 
-        // Filter resource (client) access
+        // Filter resource (client) access — qualified "client:<id>:" grants + legacy names
         Map<String, AccessToken.Access> existingResourceAccess = accessToken.getResourceAccess();
         if (existingResourceAccess != null) {
             Map<String, AccessToken.Access> filteredResourceAccess = new HashMap<>();
             for (Map.Entry<String, AccessToken.Access> entry : existingResourceAccess.entrySet()) {
+                String clientId = entry.getKey();
                 if (entry.getValue() == null || entry.getValue().getRoles() == null) continue;
+                Set<String> allowedForClient = clientGranted.getOrDefault(clientId, Set.of());
                 Set<String> filteredRoles = entry.getValue().getRoles().stream()
-                    .filter(grantedRoles::contains)
+                    .filter(role -> allowedForClient.contains(role) || legacyGranted.contains(role))
                     .collect(Collectors.toSet());
                 if (!filteredRoles.isEmpty()) {
                     AccessToken.Access restricted = new AccessToken.Access();
                     filteredRoles.forEach(restricted::addRole);
-                    filteredResourceAccess.put(entry.getKey(), restricted);
+                    filteredResourceAccess.put(clientId, restricted);
                 }
             }
             accessToken.setResourceAccess(filteredResourceAccess.isEmpty() ? null : filteredResourceAccess);

@@ -87,6 +87,9 @@ public class InMemoryRateLimiter implements RateLimiter {
         }
 
         private synchronized void updateConfig(RateLimitConfig newConfig) {
+            if (newConfig.equals(this.config)) {
+                return; // config unchanged — preserve existing bucket counters (H3)
+            }
             this.config = newConfig;
             long nowNanos = System.nanoTime();
             this.minuteBucket = new Bucket(newConfig.perMinute(), 60.0, nowNanos);

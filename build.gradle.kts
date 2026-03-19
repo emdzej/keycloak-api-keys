@@ -4,9 +4,6 @@ plugins {
 }
 
 scmVersion {
-    tag {
-        prefix.set("v")
-    }
     versionIncrementer("incrementMinor")
 }
 

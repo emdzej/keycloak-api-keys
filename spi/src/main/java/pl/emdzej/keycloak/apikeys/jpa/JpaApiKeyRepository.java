@@ -1,6 +1,8 @@
 package pl.emdzej.keycloak.apikeys.jpa;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
+import java.util.ArrayList;
 import java.util.List;
 
 public class JpaApiKeyRepository implements ApiKeyRepository {
@@ -60,6 +62,48 @@ public class JpaApiKeyRepository implements ApiKeyRepository {
             )
             .setParameter("realmId", realmId)
             .getResultList();
+    }
+
+    @Override
+    public List<ApiKeyEntity> findByRealmFiltered(String realmId, String userId, String clientId,
+                                                  Boolean active, int first, int max) {
+        StringBuilder jpql = new StringBuilder(
+            "select k from ApiKeyEntity k where k.realmId = :realmId");
+        if (userId != null)   jpql.append(" and k.userId = :userId");
+        if (clientId != null) jpql.append(" and k.clientId = :clientId");
+        if (Boolean.TRUE.equals(active))  jpql.append(" and k.revokedAt is null");
+        if (Boolean.FALSE.equals(active)) jpql.append(" and k.revokedAt is not null");
+        jpql.append(" order by k.createdAt desc");
+
+        TypedQuery<ApiKeyEntity> query = em.createQuery(jpql.toString(), ApiKeyEntity.class)
+            .setParameter("realmId", realmId);
+        if (userId != null)   query.setParameter("userId", userId);
+        if (clientId != null) query.setParameter("clientId", clientId);
+        if (first > 0) query.setFirstResult(first);
+        if (max > 0)   query.setMaxResults(max);
+        return query.getResultList();
+    }
+
+    @Override
+    public long countByRealm(String realmId) {
+        return em.createQuery(
+                "select count(k) from ApiKeyEntity k where k.realmId = :realmId",
+                Long.class)
+            .setParameter("realmId", realmId)
+            .getSingleResult();
+    }
+
+    @Override
+    public long countActiveByUserAndClient(String realmId, String userId, String clientId) {
+        return em.createQuery(
+                "select count(k) from ApiKeyEntity k " +
+                "where k.realmId = :realmId and k.userId = :userId " +
+                "and k.clientId = :clientId and k.revokedAt is null",
+                Long.class)
+            .setParameter("realmId", realmId)
+            .setParameter("userId", userId)
+            .setParameter("clientId", clientId)
+            .getSingleResult();
     }
 
     @Override

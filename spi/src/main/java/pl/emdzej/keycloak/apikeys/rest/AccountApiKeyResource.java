@@ -2,6 +2,7 @@ package pl.emdzej.keycloak.apikeys.rest;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.POST;
@@ -52,7 +53,7 @@ public class AccountApiKeyResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response create(ApiKeyCreateRequest request) {
-        AuthResult auth = authenticate();
+        AuthResult auth = authenticateBearer();
         ApiKeyService.CreatedApiKey created = apiKeyService.createUserKey(session.getContext().getRealm(), auth.user(), request, auth.user());
         ApiKeyCreatedResponse response = toCreatedResponse(created);
         return Response.status(Response.Status.CREATED).entity(response).build();
@@ -61,23 +62,56 @@ public class AccountApiKeyResource {
     @DELETE
     @Path("{keyId}")
     public Response revoke(@PathParam("keyId") String keyId) {
-        AuthResult auth = authenticate();
+        AuthResult auth = authenticateBearer();
         apiKeyService.revokeUserKey(session.getContext().getRealm(), auth.user(), keyId, auth.user());
         return Response.noContent().build();
     }
 
-    private AuthResult authenticate() {
+    /**
+     * Bearer-only authentication for state-changing operations (POST, DELETE).
+     * Cookie auth is intentionally excluded to prevent CSRF attacks (H2).
+     * Token must include the "account" audience to prevent stolen cross-client tokens
+     * from being used to create persistent credentials (H1).
+     */
+    protected AuthResult authenticateBearer() {
         AuthResult auth = new AppAuthManager.BearerTokenAuthenticator(session).authenticate();
-        logger.debugf("Bearer auth result: %s", auth);
         if (auth == null) {
-            auth = new AppAuthManager().authenticateIdentityCookie(session, session.getContext().getRealm());
-            logger.debugf("Cookie auth result: %s", auth);
-        }
-        if (auth == null) {
-            logger.warn("Both bearer and cookie auth failed for api-keys request");
+            logger.debugf("Bearer auth: failed");
             throw new NotAuthorizedException("Bearer");
         }
+        requireAccountAudience(auth);
+        logger.debugf("Bearer auth: success (user=%s)", auth.user().getId());
         return auth;
+    }
+
+    /**
+     * Bearer + cookie fallback for safe read-only operations (GET).
+     * Bearer tokens are also checked for the "account" audience (H1).
+     */
+    protected AuthResult authenticate() {
+        AuthResult auth = new AppAuthManager.BearerTokenAuthenticator(session).authenticate();
+        if (auth != null) {
+            requireAccountAudience(auth);
+            logger.debugf("Bearer auth: success (user=%s)", auth.user().getId());
+            return auth;
+        }
+        auth = new AppAuthManager().authenticateIdentityCookie(session, session.getContext().getRealm());
+        if (auth != null) {
+            logger.debugf("Cookie auth: success (user=%s)", auth.user().getId());
+            return auth;
+        }
+        logger.warn("Both bearer and cookie auth failed for api-keys request");
+        throw new NotAuthorizedException("Bearer");
+    }
+
+    /**
+     * Verifies the token audience includes "account". Tokens issued for other clients
+     * that happen to be valid in the realm must not be usable to manage API keys (H1).
+     */
+    private static void requireAccountAudience(AuthResult auth) {
+        if (!auth.getToken().hasAudience("account")) {
+            throw new ForbiddenException("Token missing required audience: account");
+        }
     }
 
     private static ApiKeyResponse toResponse(ApiKeyEntity entity) {

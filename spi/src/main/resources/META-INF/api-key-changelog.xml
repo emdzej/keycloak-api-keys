@@ -78,4 +78,12 @@
         </createIndex>
     </changeSet>
 
+    <changeSet id="api-key-1.1-optimistic-locking" author="keycloak-api-keys">
+        <addColumn tableName="api_key">
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
 </databaseChangeLog>

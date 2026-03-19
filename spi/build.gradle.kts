@@ -35,6 +35,9 @@ dependencies {
     testImplementation("org.keycloak:keycloak-server-spi:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-server-spi-private:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-services:$keycloakVersion")
+    testImplementation("org.keycloak:keycloak-model-jpa:$keycloakVersion")
+    testImplementation("org.keycloak:keycloak-model-infinispan:$keycloakVersion")
+    testImplementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
     testImplementation("com.github.dasniko:testcontainers-keycloak:$testcontainersKeycloakVersion")
 }
 

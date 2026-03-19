@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -67,6 +68,10 @@ public class ApiKeyEntity {
 
     @Column(name = "rate_limit_config")
     private String rateLimitConfigJson;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     protected ApiKeyEntity() {
         // for JPA
@@ -160,6 +165,11 @@ public class ApiKeyEntity {
 
     public String getKeyHash() {
         return keyHash;
+    }
+
+    /** Used by the dual-hash upgrade path (L3) to re-hash a legacy plain-SHA-256 entry to HMAC. */
+    public void setKeyHash(String keyHash) {
+        this.keyHash = keyHash;
     }
 
     public String getKeyPrefix() {

@@ -1,5 +1,6 @@
 package pl.emdzej.keycloak.apikeys.protocol;
 
+import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.time.Instant;
@@ -26,7 +27,6 @@ import org.keycloak.services.managers.AuthenticationSessionManager;
 import org.keycloak.services.managers.UserSessionManager;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.RootAuthenticationSessionModel;
-import pl.emdzej.keycloak.apikeys.ApiKeyHasher;
 import pl.emdzej.keycloak.apikeys.ApiKeyService;
 import pl.emdzej.keycloak.apikeys.events.ApiKeyExchangedEvent;
 import pl.emdzej.keycloak.apikeys.events.ApiKeyExpiredRejectedEvent;
@@ -42,6 +42,9 @@ import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 
 public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase {
     public static final String GRANT_TYPE = "urn:ietf:params:oauth:grant-type:api-key";
+
+    protected static final org.jboss.logging.Logger logger =
+        org.jboss.logging.Logger.getLogger(ApiKeyGrantType.class);
 
     private static final RateLimitConfigResolver RATE_LIMIT_CONFIG_RESOLVER = new RateLimitConfigResolver();
 
@@ -62,7 +65,8 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         }
 
         ApiKeyService apiKeyService = new ApiKeyService(session);
-        ApiKeyEntity apiKey = apiKeyService.findByKeyHash(ApiKeyHasher.hash(apiKeyValue));
+        // L3 — use dual-hash lookup (HMAC primary, plain SHA-256 fallback for pre-L3 keys)
+        ApiKeyEntity apiKey = apiKeyService.findByKeyValue(apiKeyValue);
         if (apiKey == null) {
             recordExchange(metrics, clientIdParam, "invalid", startNanos);
             throw invalidGrant("Invalid API key");
@@ -73,11 +77,13 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         }
         if (apiKey.getRevokedAt() != null) {
             recordExchange(metrics, apiKey.getClientId(), "revoked", startNanos);
-            throw invalidGrant("API key revoked");
+            event.detail(Details.REASON, "api_key_revoked");
+            throw invalidGrant("Invalid API key or unauthorized");
         }
         if (apiKey.getExpiresAt() != null && apiKey.getExpiresAt().isBefore(Instant.now())) {
             recordExchange(metrics, apiKey.getClientId(), "expired", startNanos);
-            event.detail("api_key_event", "API_KEY_EXPIRED_REJECTED")
+            event.detail(Details.REASON, "api_key_expired")
+                .detail("api_key_event", "API_KEY_EXPIRED_REJECTED")
                 .detail("api_key_id", apiKey.getId());
             session.getKeycloakSessionFactory().publish(new ApiKeyExpiredRejectedEvent(
                 realm.getId(),
@@ -85,26 +91,29 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
                 apiKey.getClientId(),
                 apiKey.getId()
             ));
-            throw invalidGrant("API key expired");
+            throw invalidGrant("Invalid API key or unauthorized");
         }
 
         if (clientIdParam != null && !clientIdParam.equals(apiKey.getClientId())) {
             recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
-            throw invalidClient("Client ID does not match API key");
+            event.detail(Details.REASON, "client_id_mismatch");
+            throw invalidClient("Invalid API key or unauthorized");
         }
         if (client == null || !client.getClientId().equals(apiKey.getClientId())) {
             recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
-            throw invalidClient("Client ID does not match API key");
+            event.detail(Details.REASON, "client_id_mismatch");
+            throw invalidClient("Invalid API key or unauthorized");
         }
 
         UserModel user = session.users().getUserById(realm, apiKey.getUserId());
         if (user == null) {
             recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
-            throw invalidGrant("Invalid API key");
+            throw invalidGrant("Invalid API key or unauthorized");
         }
         if (!user.isEnabled()) {
             recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
-            throw invalidGrant("User disabled");
+            event.detail(Details.REASON, "user_disabled");
+            throw invalidGrant("Invalid API key or unauthorized");
         }
 
         event.user(user);
@@ -117,6 +126,21 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
             recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
             throw invalidGrant("Rate limiter unavailable");
         }
+
+        // H4 — fail-closed: if the limiter is unhealthy (FailClosedRateLimiter or any other
+        // implementation reporting unhealthy), return 503 rather than silently bypassing limits.
+        if (!rateLimiter.isHealthy()) {
+            recordExchange(metrics, apiKey.getClientId(), "service_unavailable", startNanos);
+            event.detail("api_key_event", "API_KEY_EXCHANGE_UNAVAILABLE")
+                .detail("reason", "rate_limiter_unhealthy");
+            event.error(Errors.NOT_ALLOWED);
+            return cors.add(Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity(Map.of(
+                    "error", "service_unavailable",
+                    "error_description", "Rate limiter unavailable — try again later"))
+                .type(MediaType.APPLICATION_JSON_TYPE));
+        }
+
         rateLimiter.updateConfig(apiKey.getId(), rateLimitConfig);
         if (!rateLimiter.tryAcquire(apiKey.getId())) {
             recordExchange(metrics, apiKey.getClientId(), "rate_limited", startNanos);
@@ -207,6 +231,17 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         String resolvedScope = clientSessionCtx.getScopeString();
 
         AccessTokenResponse res = responseBuilder.build();
+
+        // M3 — remove the root auth session immediately after the token is built.
+        // Auth sessions accumulate under high volume because the TRANSIENT user session
+        // is never tracked by the regular session cleanup jobs.
+        try {
+            session.authenticationSessions().removeRootAuthenticationSession(realm, rootAuthSession);
+        } catch (Exception ex) {
+            logger.warnf(ex, "Failed to remove auth session %s after api-key exchange",
+                rootAuthSession.getId());
+        }
+
         res.setScope(resolvedScope);
         accessToken.setScope(resolvedScope);
         String scope = resolvedScope;
@@ -214,10 +249,24 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         event.detail("api_key_event", "API_KEY_EXCHANGED");
         event.detail("api_key_id", apiKey.getId());
 
+        // M2 — re-check revocation immediately before save to close the TOCTOU window.
+        // A concurrent revoke that arrived between our initial validity check and now
+        // would be caught here by either the explicit re-read or the @Version conflict.
+        ApiKeyEntity fresh = apiKeyService.findByKeyHash(apiKey.getKeyHash());
+        if (fresh == null || fresh.getRevokedAt() != null) {
+            event.detail(Details.REASON, "api_key_revoked_concurrent");
+            throw invalidGrant("Invalid API key or unauthorized");
+        }
+
         apiKey.setLastUsedAt(Instant.now());
         apiKey.setLastUsedIp(clientConnection.getRemoteAddr());
         apiKey.setUsageCount(apiKey.getUsageCount() + 1);
-        apiKeyService.save(apiKey);
+        try {
+            apiKeyService.save(apiKey);
+        } catch (OptimisticLockException e) {
+            event.detail(Details.REASON, "api_key_optimistic_lock_conflict");
+            throw invalidGrant("Invalid API key or unauthorized");
+        }
 
         recordExchange(metrics, apiKey.getClientId(), "success", startNanos);
         session.getKeycloakSessionFactory().publish(new ApiKeyExchangedEvent(
@@ -240,13 +289,13 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         return EventType.OAUTH2_EXTENSION_GRANT;
     }
 
-    private CorsErrorResponseException invalidGrant(String message) {
+    protected CorsErrorResponseException invalidGrant(String message) {
         event.detail(Details.REASON, message);
         event.error(Errors.INVALID_TOKEN);
         return new CorsErrorResponseException(cors, OAuthErrorException.INVALID_GRANT, message, Response.Status.BAD_REQUEST);
     }
 
-    private CorsErrorResponseException invalidClient(String message) {
+    protected CorsErrorResponseException invalidClient(String message) {
         event.detail(Details.REASON, message);
         event.error(Errors.INVALID_CLIENT);
         return new CorsErrorResponseException(cors, OAuthErrorException.INVALID_CLIENT, message, Response.Status.UNAUTHORIZED);

@@ -3,6 +3,7 @@ package pl.emdzej.keycloak.apikeys.rest;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
+// Note: in-memory filtering removed in H6-b; filtering now done in JPQL WHERE clauses
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
@@ -48,12 +50,14 @@ public class AdminApiKeyResource {
     @Path("/")
     public List<AdminApiKeyResponse> list(@QueryParam("userId") String userId,
                                           @QueryParam("clientId") String clientId,
-                                          @QueryParam("status") String status) {
+                                          @QueryParam("status") String status,
+                                          @QueryParam("first") @DefaultValue("0") int first,
+                                          @QueryParam("max") @DefaultValue("25") int max) {
         auth.realm().requireViewRealm();
 
         Boolean active = parseStatus(status);
 
-        return apiKeyService.findByRealm(realm, userId, clientId, active)
+        return apiKeyService.findByRealm(realm, userId, clientId, active, first, max)
             .stream()
             .map(AdminApiKeyResource::toAdminResponse)
             .collect(Collectors.toList());
