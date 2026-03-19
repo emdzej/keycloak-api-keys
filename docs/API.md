@@ -27,6 +27,7 @@ the `apiKey` variable, and all requests are ready to run.
   - [Fastify](#fastify)
   - [Hono](#hono)
   - [Spring Boot](#spring-boot)
+  - [ASP.NET Core](#aspnet-core)
 - [Error Responses](#error-responses)
 
 ---
@@ -35,13 +36,20 @@ the `apiKey` variable, and all requests are ready to run.
 
 ### User API
 
-Send a valid Keycloak Bearer token in the `Authorization` header. Any non-expired token
-issued by the realm is accepted — no specific role is required. The server enforces
+Send a valid Keycloak Bearer token in the `Authorization` header. The server enforces
 ownership: users can only access their own keys.
 
 ```
 Authorization: Bearer <access_token>
 ```
+
+> **Audience requirement** — the bearer token must include `account` in its `aud` claim.
+> Tokens issued for other clients (e.g. a microservice token) are rejected with `403`
+> even if they are otherwise valid for the realm. To obtain a token with the `account`
+> audience, add an audience mapper to your client in the Keycloak admin console.
+>
+> **CSRF protection** — `POST` (create) and `DELETE` (revoke) accept bearer tokens only.
+> `GET` (list) additionally accepts the Keycloak session cookie for browser-based access.
 
 ### Admin API
 
@@ -118,11 +126,11 @@ Request body for creating a key (user or admin endpoint).
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `name` | `string` | Yes | Human-readable label |
-| `clientId` | `string` | Yes | Must be a valid client in the realm |
-| `roles` | `string[]` | No | Subset of the owner user's roles; empty = no roles in token |
-| `scopes` | `string[]` | No | Subset of the client's scopes; empty = default scopes only |
-| `expiresAt` | `string` (ISO 8601) | No | Omit for a non-expiring key |
+| `name` | `string` | Yes | Human-readable label; max 100 characters |
+| `clientId` | `string` | Yes | Must be a valid, enabled client in the realm |
+| `roles` | `string[]` | No | Subset of the owner user's roles; max 20 entries, each ≤ 100 chars; empty = no roles in token |
+| `scopes` | `string[]` | No | Subset of the client's scopes; max 20 entries, each ≤ 100 chars; empty = default scopes only |
+| `expiresAt` | `string` (ISO 8601) | No | Must be in the future and within the realm's maximum TTL (default 1 year). Omit for a non-expiring key. |
 
 ---
 
@@ -252,11 +260,13 @@ Accept: application/json
 
 **Query parameters**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `userId` | `string` | Filter by owner user ID |
-| `clientId` | `string` | Filter by client ID |
-| `status` | `active` \| `revoked` | Filter by revocation status; omit for all |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `userId` | `string` | — | Filter by owner user ID |
+| `clientId` | `string` | — | Filter by client ID |
+| `status` | `active` \| `revoked` | — | Filter by revocation status; omit for all |
+| `first` | `number` | `0` | Pagination offset (number of results to skip) |
+| `max` | `number` | `25` | Maximum number of results to return |
 
 **Response `200`**
 
@@ -335,9 +345,12 @@ Accept: application/json
 {
   "usageCount": 15432,
   "lastUsedAt": "2026-03-18T10:00:00Z",
-  "lastUsedIp": "203.0.113.42"
+  "lastUsedIp": "203.0.113.42",
+  "usageByDay": null
 }
 ```
+
+> `usageByDay` is reserved for future per-day breakdown and is currently always `null`.
 
 **Response `404`** if the key does not exist.
 
@@ -363,8 +376,15 @@ Accept: application/json
 }
 ```
 
-`cacheStatus` is `DOWN` when the Infinispan rate-limit cache is unavailable (falls back to
-in-memory in that case).
+`cacheStatus` reflects the health of the Infinispan rate-limit cache:
+
+- `UP` — Infinispan is connected and rate limiting is cluster-wide.
+- `DOWN` — Infinispan is unavailable. Behaviour depends on the realm attribute
+  `apiKeysRateLimitFailClosed`:
+  - `false` (default) — falls back to a per-node in-memory limiter. Rate limits are
+    enforced per instance rather than across the cluster.
+  - `true` — all token exchanges are rejected with `503 Service Unavailable` until
+    the cache recovers. Use this in production to prevent limit bypass during outages.
 
 ---
 
@@ -419,6 +439,11 @@ can never escalate privileges beyond what a normal user session would have.
 | `400` | `invalid_grant` | Key not found, revoked, expired, or realm mismatch |
 | `401` | `invalid_client` | Client authentication failed, or `client_id` does not match key |
 | `429` | `rate_limit_exceeded` | Key has exceeded its rate limit |
+| `503` | `service_unavailable` | Rate limiter is unhealthy and fail-closed mode is enabled (`apiKeysRateLimitFailClosed=true`) |
+
+All error descriptions use the generic message `"Invalid API key or unauthorized"` — the
+specific rejection reason (key revoked, expired, user disabled, etc.) is recorded in the
+Keycloak audit log under the `reason` event detail but is never returned to the caller.
 
 On `429`, the following headers are included:
 
@@ -579,6 +604,73 @@ processing (compatible with other authentication mechanisms).
 
 ---
 
+### ASP.NET Core
+
+```csharp
+// Program.cs
+builder.Services
+    .AddAuthentication(KeycloakApiKeyExtensions.DefaultScheme)
+    .AddKeycloakApiKeyAuthentication(options =>
+    {
+        options.ServerUrl    = "https://auth.example.com";
+        options.Realm        = "my-realm";
+        options.ClientId     = "my-app";
+        options.ClientSecret = "...";   // omit for public clients
+    });
+
+builder.Services.AddAuthorization();
+
+// In a route handler (Minimal API):
+app.MapGet("/api/me", [Authorize] (ClaimsPrincipal user) => new {
+    sub      = user.FindFirstValue("sub"),
+    azp      = user.FindFirstValue("azp"),
+    apiKeyId = user.FindFirstValue("api_key_id"),
+    scope    = user.FindFirstValue("scope"),
+    roles    = user.FindAll(ClaimTypes.Role).Select(c => c.Value),
+});
+```
+
+**Options**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ServerUrl` | `string` | — | Keycloak base URL |
+| `Realm` | `string` | — | Realm name |
+| `ClientId` | `string` | — | OAuth2 client ID |
+| `ClientSecret` | `string?` | `null` | Client secret (omit for public clients) |
+| `HeaderName` | `string` | `"X-API-Key"` | Request header to read the key from |
+| `CacheTtlSeconds` | `int` | `300` | Cache TTL in seconds |
+
+**Claims on `ClaimsPrincipal`**
+
+| Claim | `ClaimTypes` constant | Description |
+|-------|-----------------------|-------------|
+| `sub` | `ClaimTypes.NameIdentifier` | User ID |
+| `preferred_username` | `ClaimTypes.Name` | Username |
+| `email` | `ClaimTypes.Email` | Email address |
+| `<realm role>` | `ClaimTypes.Role` | One claim per realm role — enables `[Authorize(Roles = "admin")]` |
+| `client_role` | — | Client roles as `<clientId>:<roleName>` |
+| `api_key_id` | — | ID of the API key used |
+| `scope` | — | Space-separated granted scopes |
+
+**Custom cache (e.g. distributed Redis)**
+
+```csharp
+builder.Services.AddSingleton<ITokenCache<ApiKeyClaimsInfo>, MyRedisCache>();
+// register handler after — it picks up the custom ITokenCache
+builder.Services.AddAuthentication(...).AddKeycloakApiKeyAuthentication(...);
+```
+
+**Custom `HttpClient` (resilience policies)**
+
+```csharp
+builder.Services
+    .AddHttpClient(KeycloakTokenExchangeClient.HttpClientName)
+    .AddStandardResilienceHandler();   // Microsoft.Extensions.Http.Resilience
+```
+
+---
+
 ## Error Responses
 
 ### Middleware errors (Express / Fastify / Hono)
@@ -595,3 +687,11 @@ processing (compatible with other authentication mechanisms).
 |--------|------|-------|
 | `401` | `{"error":"invalid_api_key","error_description":"..."}` | No key, or Keycloak rejected it |
 | `401` | `{"error":"invalid_token","error_description":"..."}` | JWT decode failed |
+
+### Middleware errors (ASP.NET Core)
+
+| Status | Cause |
+|--------|-------|
+| `401` | No `X-API-Key` header, or Keycloak rejected the key — `WWW-Authenticate: ApiKey realm="..."` header is set |
+| `403` | Bearer token present but missing `account` audience |
+| `429` | Keycloak rate-limited the key — `Retry-After` and `X-RateLimit-*` headers forwarded from Keycloak |
