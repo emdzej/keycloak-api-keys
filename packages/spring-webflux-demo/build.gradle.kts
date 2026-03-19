@@ -17,11 +17,12 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":packages:spring"))
-    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation(project(":packages:spring-webflux"))
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-security")
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("io.projectreactor:reactor-test")
 }

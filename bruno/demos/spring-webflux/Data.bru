@@ -1,0 +1,17 @@
+meta {
+  name: Data
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{springWebfluxUrl}}/api/data
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-API-Key: {{apiKey}}
+}
+

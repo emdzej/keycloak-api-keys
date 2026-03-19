@@ -1,0 +1,18 @@
+meta {
+  name: Profile
+  type: http
+  seq: 2
+3
+}
+
+get {
+  url: {{springWebfluxUrl}}/api/profile
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-API-Key: {{apiKey}}
+}
+

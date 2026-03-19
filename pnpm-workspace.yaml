@@ -3,3 +3,5 @@ packages:
   - 'packages/*'
   - '!packages/spring'
   - '!packages/spring-demo'
+  - '!packages/spring-webflux'
+  - '!packages/spring-webflux-demo'

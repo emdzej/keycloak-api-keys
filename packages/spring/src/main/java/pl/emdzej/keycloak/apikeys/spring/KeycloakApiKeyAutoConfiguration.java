@@ -3,9 +3,9 @@ package pl.emdzej.keycloak.apikeys.spring;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 
 @AutoConfiguration
 @EnableConfigurationProperties(KeycloakApiKeyProperties.class)
@@ -13,8 +13,8 @@ public class KeycloakApiKeyAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        return builder.build();
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 
     @Bean
@@ -25,17 +25,16 @@ public class KeycloakApiKeyAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public TokenCache tokenCache(KeycloakApiKeyProperties properties) {
-        return new TokenCache(properties.cacheTtl());
+    public TokenCache tokenCache(CacheManager cacheManager) {
+        return new TokenCache(cacheManager);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public KeycloakApiKeyFilter keycloakApiKeyFilter(
-        KeycloakApiKeyProperties properties,
-        ApiKeyTokenExchangeClient tokenExchangeClient,
-        TokenCache tokenCache
-    ) {
+            KeycloakApiKeyProperties properties,
+            ApiKeyTokenExchangeClient tokenExchangeClient,
+            TokenCache tokenCache) {
         return new KeycloakApiKeyFilter(properties, tokenExchangeClient, tokenCache);
     }
 

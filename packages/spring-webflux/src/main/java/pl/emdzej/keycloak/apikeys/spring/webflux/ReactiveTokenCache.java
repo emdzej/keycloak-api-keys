@@ -1,4 +1,4 @@
-package pl.emdzej.keycloak.apikeys.spring;
+package pl.emdzej.keycloak.apikeys.spring.webflux;
 
 import java.time.Instant;
 import java.util.Map;
@@ -18,16 +18,14 @@ import org.springframework.cache.CacheManager;
  * <p>Because {@link org.springframework.cache.concurrent.ConcurrentMapCache} does
  * not support per-entry TTL, expiry is enforced at read time: stale entries are
  * evicted on access using the {@link CachedToken#expiresAt()} timestamp.
- * Cache providers that natively support TTL (e.g. Redis, Caffeine) will handle
- * eviction automatically in addition to this check.
  */
-public class TokenCache {
+public class ReactiveTokenCache {
 
     public static final String CACHE_NAME = "api-keys-tokens";
 
     private final Cache cache;
 
-    public TokenCache(CacheManager cacheManager) {
+    public ReactiveTokenCache(CacheManager cacheManager) {
         Cache resolved = cacheManager.getCache(CACHE_NAME);
         if (resolved == null) {
             throw new IllegalStateException(

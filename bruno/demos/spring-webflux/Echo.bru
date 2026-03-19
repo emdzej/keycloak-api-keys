@@ -1,0 +1,24 @@
+meta {
+  name: Echo
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{springWebfluxUrl}}/api/echo
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-API-Key: {{apiKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "message": "hello from Bruno",
+    "timestamp": "2024-01-01T00:00:00Z"
+  }
+}

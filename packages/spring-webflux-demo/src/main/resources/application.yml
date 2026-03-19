@@ -1,0 +1,11 @@
+server:
+  port: ${PORT:3005}
+
+keycloak:
+  api-keys:
+    server-url: ${KEYCLOAK_URL:http://localhost:8080}
+    realm: ${KEYCLOAK_REALM:master}
+    client-id: ${CLIENT_ID:admin-cli}
+    client-secret: ${CLIENT_SECRET:}
+    header-name: ${API_KEY_HEADER:X-API-Key}
+    cache-ttl: ${CACHE_TTL:PT5M}
