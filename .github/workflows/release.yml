@@ -32,7 +32,7 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name }}"
           VERSION="${TAG}"   # no v prefix — tags are plain semver (e.g. 0.1.0)
-          GRADLE_VERSION=$(./gradlew currentVersion -q --no-daemon | sed 's/Project version: //')
+          GRADLE_VERSION=$(./gradlew currentVersion -q --no-daemon | sed 's/Project version: //' | tr -d '[:space:]')
           echo "Tag version : $VERSION"
           echo "Gradle version: $GRADLE_VERSION"
           if [ "$GRADLE_VERSION" != "$VERSION" ]; then
