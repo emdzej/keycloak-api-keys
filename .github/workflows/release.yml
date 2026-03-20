@@ -10,7 +10,7 @@ permissions:
   id-token: write  # Required for npm trusted publishing (OIDC)
 
 jobs:
-  # ── Java: build, test, publish to GitHub Packages Maven ─────────────────────
+  # ── Java: build, test, publish to Maven Central + GitHub Packages ───────────
   publish-maven:
     name: Publish Maven packages
     runs-on: ubuntu-latest
@@ -41,23 +41,49 @@ jobs:
             exit 1
           fi
 
-      - name: Publish SPI JAR
+      # ── Publish to GitHub Packages ──
+      - name: Publish SPI to GitHub Packages
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew :spi:publishSpiPublicationToGitHubPackagesRepository --no-daemon
 
-      - name: Publish Spring package
+      - name: Publish Spring to GitHub Packages
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew :packages:spring:publishSpringPublicationToGitHubPackagesRepository --no-daemon
 
-      - name: Publish Spring WebFlux package
+      - name: Publish Spring WebFlux to GitHub Packages
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew :packages:spring-webflux:publishSpringWebfluxPublicationToGitHubPackagesRepository --no-daemon
+
+      # ── Publish to Maven Central ──
+      - name: Publish SPI to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: ./gradlew :spi:publishSpiPublicationToMavenCentralRepository --no-daemon
+
+      - name: Publish Spring to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: ./gradlew :packages:spring:publishSpringPublicationToMavenCentralRepository --no-daemon
+
+      - name: Publish Spring WebFlux to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: ./gradlew :packages:spring-webflux:publishSpringWebfluxPublicationToMavenCentralRepository --no-daemon
 
   # ── Node: build, test, publish to npmjs.org (trusted publishing) ────────────
   publish-npm:
