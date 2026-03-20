@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("java-library")
     `maven-publish`
@@ -79,9 +81,10 @@ publishing {
 }
 
 signing {
-    val signingKey = System.getenv("GPG_PRIVATE_KEY")
+    val signingKeyBase64 = System.getenv("GPG_PRIVATE_KEY")
     val signingPassword = System.getenv("GPG_PASSPHRASE")
-    if (signingKey != null && signingPassword != null) {
+    if (signingKeyBase64 != null && signingPassword != null) {
+        val signingKey = String(Base64.getDecoder().decode(signingKeyBase64))
         useInMemoryPgpKeys(signingKey, signingPassword)
         sign(publishing.publications["spring"])
     }
