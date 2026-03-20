@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write  # Required for npm trusted publishing (OIDC)
 
 jobs:
   # ── Java: build, test, publish to GitHub Packages Maven ─────────────────────
@@ -58,7 +59,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew :packages:spring-webflux:publishSpringWebfluxPublicationToGitHubPackagesRepository --no-daemon
 
-  # ── Node: build, test, publish to GitHub Packages npm ───────────────────────
+  # ── Node: build, test, publish to npmjs.org (trusted publishing) ────────────
   publish-npm:
     name: Publish npm packages
     runs-on: ubuntu-latest
@@ -67,16 +68,13 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.6.1
 
-      - name: Set up Node (GitHub Packages registry)
+      - name: Set up Node (npm registry)
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
-          registry-url: "https://npm.pkg.github.com"
-          scope: "@emdzej"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -96,21 +94,15 @@ jobs:
 
       - name: Publish @emdzej/keycloak-api-keys-express
         working-directory: packages/express
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm publish --no-git-checks --access public
+        run: npm publish --access public --provenance
 
       - name: Publish @emdzej/keycloak-api-keys-fastify
         working-directory: packages/fastify
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm publish --no-git-checks --access public
+        run: npm publish --access public --provenance
 
       - name: Publish @emdzej/keycloak-api-keys-hono
         working-directory: packages/hono
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm publish --no-git-checks --access public
+        run: npm publish --access public --provenance
 
   # ── .NET: build, test, publish to GitHub Packages NuGet ─────────────────────
   publish-nuget:
