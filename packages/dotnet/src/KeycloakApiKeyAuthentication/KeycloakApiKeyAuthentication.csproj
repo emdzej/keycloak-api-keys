@@ -11,7 +11,7 @@
     <Title>Keycloak API Key Authentication for ASP.NET Core</Title>
     <Description>ASP.NET Core authentication handler that exchanges API keys for Keycloak JWTs, populating HttpContext.User so [Authorize] and policy-based auth work without extra wiring.</Description>
     <Authors>emdzej</Authors>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/emdzej/keycloak-api-keys</PackageProjectUrl>
     <RepositoryUrl>https://github.com/emdzej/keycloak-api-keys</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

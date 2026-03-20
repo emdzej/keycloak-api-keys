@@ -104,7 +104,7 @@ jobs:
         working-directory: packages/hono
         run: npm publish --access public --provenance
 
-  # ── .NET: build, test, publish to GitHub Packages NuGet ─────────────────────
+  # ── .NET: build, test, publish to NuGet.org + GitHub Packages ────────────────
   publish-nuget:
     name: Publish NuGet package
     runs-on: ubuntu-latest
@@ -115,9 +115,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.x"
-          source-url: "https://nuget.pkg.github.com/emdzej/index.json"
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and test
         run: dotnet test packages/dotnet/KeycloakApiKeys.sln --configuration Release
@@ -130,6 +127,13 @@ jobs:
             --configuration Release \
             -p:Version="$VERSION" \
             --output packages/dotnet/nupkg
+
+      - name: Publish to NuGet.org
+        run: |
+          dotnet nuget push packages/dotnet/nupkg/*.nupkg \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --skip-duplicate
 
       - name: Publish to GitHub Packages NuGet
         run: |
