@@ -71,7 +71,7 @@ publishing {
         }
         maven {
             name = "MavenCentral"
-            url = uri("https://central.sonatype.com/api/v1/publisher/deployments/download/")
+            url = uri("https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/")
             credentials {
                 username = System.getenv("MAVEN_CENTRAL_USERNAME")
                 password = System.getenv("MAVEN_CENTRAL_PASSWORD")
