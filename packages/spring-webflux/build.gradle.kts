@@ -19,8 +19,6 @@ dependencies {
 }
 
 java {
-    withSourcesJar()
-    withJavadocJar()
 }
 
 mavenPublishing {
