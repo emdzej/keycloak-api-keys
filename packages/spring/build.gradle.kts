@@ -1,6 +1,7 @@
 plugins {
     id("java-library")
-    id("maven-publish")
+    `maven-publish`
+    signing
 }
 
 val springBootVersion = "4.0.3"
@@ -19,22 +20,40 @@ dependencies {
 
 java {
     withSourcesJar()
+    withJavadocJar()
 }
 
 publishing {
     publications {
         create<MavenPublication>("spring") {
             from(components["java"])
+            groupId = "pl.emdzej.keycloak"
             artifactId = "keycloak-api-keys-spring"
+            
             pom {
                 name.set("Keycloak API Keys — Spring Boot")
                 description.set("Spring Boot integration for Keycloak API key authentication")
                 url.set("https://github.com/emdzej/keycloak-api-keys")
+                
                 licenses {
                     license {
-                        name.set("MIT License")
-                        url.set("https://opensource.org/licenses/MIT")
+                        name.set("Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
                     }
+                }
+                
+                developers {
+                    developer {
+                        id.set("emdzej")
+                        name.set("Michał Jaskólski")
+                        email.set("michal@jaskolski.pro")
+                    }
+                }
+                
+                scm {
+                    url.set("https://github.com/emdzej/keycloak-api-keys")
+                    connection.set("scm:git:git://github.com/emdzej/keycloak-api-keys.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/emdzej/keycloak-api-keys.git")
                 }
             }
         }
@@ -48,5 +67,26 @@ publishing {
                 password = System.getenv("GITHUB_TOKEN")
             }
         }
+        maven {
+            name = "MavenCentral"
+            url = uri("https://central.sonatype.com/api/v1/publisher/deployments/download/")
+            credentials {
+                username = System.getenv("MAVEN_CENTRAL_USERNAME")
+                password = System.getenv("MAVEN_CENTRAL_PASSWORD")
+            }
+        }
     }
+}
+
+signing {
+    val signingKey = System.getenv("GPG_PRIVATE_KEY")
+    val signingPassword = System.getenv("GPG_PASSPHRASE")
+    if (signingKey != null && signingPassword != null) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign(publishing.publications["spring"])
+    }
+}
+
+tasks.withType<PublishToMavenRepository>().configureEach {
+    dependsOn(tasks.withType<Sign>())
 }

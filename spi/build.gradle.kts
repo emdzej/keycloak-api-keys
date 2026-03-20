@@ -2,12 +2,15 @@ plugins {
     java
     id("com.gradleup.shadow")
     `maven-publish`
+    signing
 }
 
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
     }
+    withSourcesJar()
+    withJavadocJar()
 }
 
 val keycloakVersion = "26.5.2"
@@ -51,27 +54,51 @@ tasks.shadowJar {
     archiveVersion.set("")
     mergeServiceFiles()
     archiveBaseName.set("keycloak-api-keys")
-    // Exclude bundled Maven metadata from shaded dependencies so Maven tooling
-    // (including GitHub Packages) does not pick up Guava's pom.xml as our descriptor
     exclude("META-INF/maven/**")
+}
+
+// Empty Javadoc JAR for SPI (no public API to document)
+tasks.javadoc {
+    options {
+        (this as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
+    }
 }
 
 publishing {
     publications {
         create<MavenPublication>("spi") {
+            groupId = "pl.emdzej.keycloak"
             artifactId = "keycloak-api-keys-spi"
             artifact(tasks.shadowJar) {
                 classifier = ""
             }
+            artifact(tasks.named("sourcesJar"))
+            artifact(tasks.named("javadocJar"))
+            
             pom {
                 name.set("Keycloak API Keys SPI")
                 description.set("Keycloak SPI that adds API key authentication support")
                 url.set("https://github.com/emdzej/keycloak-api-keys")
+                
                 licenses {
                     license {
-                        name.set("MIT License")
-                        url.set("https://opensource.org/licenses/MIT")
+                        name.set("Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
                     }
+                }
+                
+                developers {
+                    developer {
+                        id.set("emdzej")
+                        name.set("Michał Jaskólski")
+                        email.set("michal@jaskolski.pro")
+                    }
+                }
+                
+                scm {
+                    url.set("https://github.com/emdzej/keycloak-api-keys")
+                    connection.set("scm:git:git://github.com/emdzej/keycloak-api-keys.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/emdzej/keycloak-api-keys.git")
                 }
             }
         }
@@ -85,5 +112,26 @@ publishing {
                 password = System.getenv("GITHUB_TOKEN")
             }
         }
+        maven {
+            name = "MavenCentral"
+            url = uri("https://central.sonatype.com/api/v1/publisher/deployments/download/")
+            credentials {
+                username = System.getenv("MAVEN_CENTRAL_USERNAME")
+                password = System.getenv("MAVEN_CENTRAL_PASSWORD")
+            }
+        }
     }
+}
+
+signing {
+    val signingKey = System.getenv("GPG_PRIVATE_KEY")
+    val signingPassword = System.getenv("GPG_PASSPHRASE")
+    if (signingKey != null && signingPassword != null) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign(publishing.publications["spi"])
+    }
+}
+
+tasks.withType<PublishToMavenRepository>().configureEach {
+    dependsOn(tasks.withType<Sign>())
 }
