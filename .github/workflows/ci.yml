@@ -5,6 +5,7 @@ on:
     branches: ["**"]
     tags-ignore: ["**"]   # releases handled by release.yml
   pull_request:
+  workflow_dispatch:  # Manual trigger
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -1,5 +1,11 @@
 # keycloak-api-keys
 
+[![CI](https://github.com/emdzej/keycloak-api-keys/actions/workflows/ci.yml/badge.svg)](https://github.com/emdzej/keycloak-api-keys/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/pl.emdzej.keycloak/keycloak-api-keys-spi.svg)](https://central.sonatype.com/artifact/pl.emdzej.keycloak/keycloak-api-keys-spi)
+[![npm version](https://img.shields.io/npm/v/@emdzej/keycloak-api-keys-express.svg)](https://www.npmjs.com/package/@emdzej/keycloak-api-keys-express)
+[![NuGet version](https://img.shields.io/nuget/v/EmDzej.KeycloakApiKeyAuthentication.svg)](https://www.nuget.org/packages/EmDzej.KeycloakApiKeyAuthentication)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 Keycloak extension for API key management — generate, validate, and exchange API keys for JWT tokens.
 
 ## Overview
