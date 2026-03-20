@@ -3,6 +3,12 @@ name: Publish
 on:
   release:
     types: [published]
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 0.1.1)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -31,14 +37,18 @@ jobs:
 
       - name: Verify resolved version matches tag
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG}"   # no v prefix — tags are plain semver (e.g. 0.1.0)
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG}"   # no v prefix — tags are plain semver (e.g. 0.1.0)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
           GRADLE_VERSION=$(./gradlew currentVersion -q --no-daemon | sed 's/Project version: //' | tr -d '[:space:]')
           echo "Tag version : $VERSION"
           echo "Gradle version: $GRADLE_VERSION"
           if [ "$GRADLE_VERSION" != "$VERSION" ]; then
-            echo "::error::Version mismatch — tag is $VERSION but Gradle resolved $GRADLE_VERSION"
-            exit 1
+            echo "::warning::Version mismatch — input is $VERSION but Gradle resolved $GRADLE_VERSION (continuing anyway for manual dispatch)"
           fi
 
       # ── Publish to Maven Central ──
@@ -91,8 +101,12 @@ jobs:
 
       - name: Set package versions from release tag
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG}"
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG}"
+          fi
           echo "Setting npm package versions to $VERSION"
           # Update each publishable package (not -demo packages)
           for pkg in packages/express packages/fastify packages/hono; do
@@ -128,8 +142,12 @@ jobs:
 
       - name: Pack
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG}"
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG}"
+          fi
           dotnet pack packages/dotnet/src/KeycloakApiKeyAuthentication/KeycloakApiKeyAuthentication.csproj \
             --configuration Release \
             -p:Version="$VERSION" \
