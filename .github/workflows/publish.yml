@@ -1,4 +1,4 @@
-name: Release
+name: Publish
 
 on:
   release:
@@ -40,25 +40,6 @@ jobs:
             echo "::error::Version mismatch — tag is $VERSION but Gradle resolved $GRADLE_VERSION"
             exit 1
           fi
-
-      # ── Publish to GitHub Packages ──
-      - name: Publish SPI to GitHub Packages
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :spi:publishSpiPublicationToGitHubPackagesRepository --no-daemon
-
-      - name: Publish Spring to GitHub Packages
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :packages:spring:publishSpringPublicationToGitHubPackagesRepository --no-daemon
-
-      - name: Publish Spring WebFlux to GitHub Packages
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :packages:spring-webflux:publishSpringWebfluxPublicationToGitHubPackagesRepository --no-daemon
 
       # ── Publish to Maven Central ──
       - name: Publish SPI to Maven Central
