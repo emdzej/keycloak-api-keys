@@ -8,8 +8,6 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
     }
-    withSourcesJar()
-    withJavadocJar()
 }
 
 val keycloakVersion = "26.5.2"
