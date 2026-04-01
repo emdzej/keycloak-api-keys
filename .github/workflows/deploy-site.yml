@@ -32,19 +32,17 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: site/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
 
       - name: Install dependencies
-        working-directory: site
-        run: pnpm install
+        run: pnpm install --filter keycloak-api-keys-site...
 
       - name: Build site
-        working-directory: site
-        run: pnpm build
+        run: pnpm --filter keycloak-api-keys-site build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
