@@ -1,0 +1,98 @@
+---
+title: Keycloak API Keys
+description: API Key authentication for Keycloak. Because OAuth2 is great until your IoT toaster needs to authenticate.
+template: splash
+hero:
+  title: Keycloak API Keys
+  tagline: API Key authentication for Keycloak. Because OAuth2 is great until your IoT toaster needs to authenticate.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Get Started
+      link: /keycloak-api-keys/getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/emdzej/keycloak-api-keys
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why API Keys?
+
+<CardGrid stagger>
+  <Card title="Simple Authentication" icon="key">
+    Not everything speaks OAuth2. CLI tools, IoT devices, scripts, and legacy systems often just need a simple API key.
+  </Card>
+  <Card title="Keycloak as Authority" icon="shield">
+    Keycloak validates every request. No local JWT validation, no token expiry headaches. The key is valid until you revoke it.
+  </Card>
+  <Card title="Per-Client Prefixes" icon="tag">
+    Each client gets its own prefix (`myapp_xxx`). Know at a glance which application a key belongs to.
+  </Card>
+  <Card title="Full Audit Trail" icon="document">
+    Every key creation, usage, and revocation is logged. See who created what and when it was last used.
+  </Card>
+</CardGrid>
+
+## How It Works
+
+```
+┌─────────┐         ┌──────────────┐         ┌──────────────┐
+│ Client  │──────▶  │  Your API    │──────▶  │  Keycloak    │
+│         │  API    │  (middleware)│  token  │  (validates) │
+│         │  Key    │              │  intro  │              │
+└─────────┘         └──────────────┘         └──────────────┘
+```
+
+1. Client sends request with `X-API-Key` header
+2. Middleware calls Keycloak's token introspection endpoint
+3. Keycloak validates the key and returns the associated client/scopes
+4. Your API processes the request with full identity context
+
+## Middleware Libraries
+
+Ready-to-use middleware for your stack:
+
+<CardGrid>
+  <Card title="Java / Spring Boot" icon="java">
+    ```xml
+    <dependency>
+      <groupId>pl.emdzej.keycloak</groupId>
+      <artifactId>keycloak-api-keys-spring-boot-starter</artifactId>
+    </dependency>
+    ```
+  </Card>
+  <Card title="Node.js / Express" icon="node">
+    ```bash
+    npm install @emdzej/keycloak-api-keys-node
+    ```
+  </Card>
+  <Card title=".NET / ASP.NET Core" icon="dotnet">
+    ```bash
+    dotnet add package EmDzej.KeycloakApiKeyAuthentication
+    ```
+  </Card>
+</CardGrid>
+
+## Quick Example
+
+```typescript
+import express from 'express';
+import { apiKeyAuth } from '@emdzej/keycloak-api-keys-node';
+
+const app = express();
+
+app.use(apiKeyAuth({
+  keycloakUrl: 'https://auth.example.com',
+  realm: 'my-realm',
+  clientId: 'my-api',
+  clientSecret: process.env.CLIENT_SECRET,
+}));
+
+app.get('/api/data', (req, res) => {
+  // req.apiKey contains validated key info
+  res.json({ message: 'Authenticated!' });
+});
+```

@@ -1,7 +1,10 @@
 packages:
-  - 'account-ui'
-  - 'packages/*'
+  - account-ui
+  - packages/*
+  - site
   - '!packages/spring'
   - '!packages/spring-demo'
   - '!packages/spring-webflux'
   - '!packages/spring-webflux-demo'
+ignoredBuiltDependencies:
+  - sharp
