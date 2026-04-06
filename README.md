@@ -340,6 +340,10 @@ All five demos share the same environment variables:
 | `CLIENT_SECRET` | — | Client secret (omit for public clients) |
 | `PORT` | `3001` / `3002` / `3003` / `3004` / `3005` / `3006` | HTTP port |
 
+## Support
+
+If you find this project useful, consider [buying me a coffee](https://buymeacoffee.com/emdzej) ☕ or [sponsoring on GitHub](https://github.com/sponsors/emdzej).
+
 ## License
 
 Apache License 2.0
