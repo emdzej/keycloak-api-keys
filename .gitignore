@@ -30,3 +30,6 @@ bin/
 .idea/
 
 .vscode/
+# .NET build output
+obj/
+*.nupkg
