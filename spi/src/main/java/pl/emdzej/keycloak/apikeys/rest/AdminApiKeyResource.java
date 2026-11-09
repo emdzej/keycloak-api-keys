@@ -51,6 +51,9 @@ import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 @Path("/")
 @Produces("application/json;realm=admin")
 public class AdminApiKeyResource {
+    static final String KCCTL_MANIFEST_MEDIA_TYPE = "application/yaml";
+    static final String KCCTL_MANIFEST = loadKcctlManifest();
+
     private final KeycloakSession session;
     private final RealmModel realm;
     private final AdminPermissionEvaluator auth;
@@ -95,6 +98,18 @@ public class AdminApiKeyResource {
             entity.getLastUsedIp(),
             null
         );
+    }
+
+    /**
+     * kcctl extension manifest, so {@code kcctl api-key ...} commands are discovered
+     * automatically. Static and data-free; any realm viewer may read it.
+     */
+    @GET
+    @Path("kcctl-extension")
+    @Produces(KCCTL_MANIFEST_MEDIA_TYPE)
+    public Response kcctlExtension() {
+        auth.realm().requireViewRealm();
+        return Response.ok(KCCTL_MANIFEST, KCCTL_MANIFEST_MEDIA_TYPE).build();
     }
 
     @GET
@@ -178,5 +193,16 @@ public class AdminApiKeyResource {
             entity.getLastUsedAt(),
             entity.getUsageCount()
         );
+    }
+
+    private static String loadKcctlManifest() {
+        try (var in = AdminApiKeyResource.class.getResourceAsStream("/kcctl-extension.yaml")) {
+            if (in == null) {
+                throw new IllegalStateException("kcctl-extension.yaml missing from provider JAR");
+            }
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException ex) {
+            throw new java.io.UncheckedIOException(ex);
+        }
     }
 }

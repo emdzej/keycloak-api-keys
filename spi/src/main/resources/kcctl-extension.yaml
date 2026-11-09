@@ -1,0 +1,76 @@
+# kcctl extension for keycloak-api-keys (https://github.com/emdzej/keycloak-api-keys).
+# Served by the SPI at GET /admin/realms/{realm}/api-keys/kcctl-extension,
+# or installed with: kcctl extension install api-keys.yaml
+apiVersion: kcctl/v1
+name: api-keys
+description: API keys issued by the keycloak-api-keys extension
+requires:
+  providers:
+    - admin-realm-restapi-extension/api-keys
+commands:
+  - name: api-key
+    aliases: [api-keys, apikey]
+    short: Manage API keys (keycloak-api-keys extension)
+    base: api-keys
+    columns:
+      - {header: id, path: .id}
+      - {header: name, path: .name}
+      - {header: prefix, path: .keyPrefix}
+      - {header: client, path: .clientId}
+      - {header: user, path: .userId}
+      - {header: expires, path: .expiresAt}
+      - {header: last used, path: .lastUsedAt}
+      - {header: revoked, path: .revokedAt}
+    complete:
+      value: .id
+      desc: .name
+    verbs:
+      - name: list
+        aliases: [ls]
+        short: List API keys in the realm
+        paged: true
+        query:
+          - {flag: user, param: userId, lookup: user, usage: "only keys of this user (id or username)"}
+          - {flag: client, param: clientId, complete: client, usage: only keys for this client (clientId)}
+          - {flag: status, values: [active, revoked, expired], usage: "active (not revoked, not expired), revoked, or expired"}
+        example: |-
+          kcctl api-key list
+          kcctl api-key list --user alice --status active
+          kcctl api-key list --status expired
+
+      - name: create
+        short: Issue an API key to a user (the key is shown only once)
+        method: POST
+        path: users/{user}/api-keys
+        args:
+          - {name: user, lookup: user, usage: user id or username}
+        fields:
+          - {flag: name, required: true, usage: label for the key}
+          - {flag: client, path: clientId, complete: client, required: true, usage: client the key exchanges tokens for (clientId)}
+          - {flag: role, path: roles, kind: strings, complete: realm-role, usage: "role the key carries (repeatable); a key has only the roles listed here. Client roles of --client take precedence over realm roles with the same name"}
+          - {flag: scope, path: scopes, kind: strings, complete: client-scope, usage: limit the key to these scopes (repeatable)}
+          - {flag: expires-at, path: expiresAt, usage: "expiry as an ISO-8601 instant, e.g. 2027-01-01T00:00:00Z"}
+        body: true
+        secret: key
+        example: |-
+          kcctl api-key create alice --name ci --client my-api --role deployer --expires-at 2027-01-01T00:00:00Z
+          kcctl api-key create alice --name ci --client my-api -o jsonpath='$.key' > ci.key
+
+      - name: stats
+        short: Show usage of one API key
+        path: "{key}/stats"
+        args:
+          - {name: key, complete: self, usage: key id}
+
+      - name: revoke
+        aliases: [delete, rm]
+        short: Revoke an API key
+        method: DELETE
+        path: "{key}"
+        args:
+          - {name: key, complete: self, usage: key id}
+        message: Revoked API key {key}.
+
+      - name: health
+        short: Show the extension's health (key count, rate limiter)
+        path: health
