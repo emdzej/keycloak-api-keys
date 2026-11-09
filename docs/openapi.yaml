@@ -333,6 +333,8 @@ paths:
       description: |
         Static `kcctl/v1` manifest describing these Admin API endpoints, so `kcctl api-key ...`
         commands appear after `kcctl extension discover`. Requires `view-realm`.
+        Off by default: returns 404 unless Keycloak runs with
+        `--spi-admin-realm-restapi-extension--api-keys--kcctl-extension-enabled=true`.
       security:
         - adminBearer: []
       responses:
@@ -343,6 +345,8 @@ paths:
               schema: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: The endpoint is disabled (`kcctl-extension-enabled` is not set).
 
   /admin/realms/{realm}/api-keys/health:
     parameters:

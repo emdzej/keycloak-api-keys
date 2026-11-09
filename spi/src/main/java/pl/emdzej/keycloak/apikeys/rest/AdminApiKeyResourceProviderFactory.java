@@ -16,23 +16,41 @@
 
 package pl.emdzej.keycloak.apikeys.rest;
 
+import java.util.List;
 import org.keycloak.Config;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
+import org.keycloak.provider.ProviderConfigProperty;
+import org.keycloak.provider.ProviderConfigurationBuilder;
 import org.keycloak.services.resources.admin.ext.AdminRealmResourceProvider;
 import org.keycloak.services.resources.admin.ext.AdminRealmResourceProviderFactory;
 
 public class AdminApiKeyResourceProviderFactory implements AdminRealmResourceProviderFactory {
     public static final String ID = "api-keys";
+    static final String KCCTL_EXTENSION_ENABLED = "kcctl-extension-enabled";
+
+    private boolean kcctlExtensionEnabled;
 
     @Override
     public AdminRealmResourceProvider create(KeycloakSession session) {
-        return new AdminApiKeyResourceProvider(session);
+        return new AdminApiKeyResourceProvider(session, kcctlExtensionEnabled);
     }
 
     @Override
     public void init(Config.Scope config) {
-        // no-op
+        kcctlExtensionEnabled = config.getBoolean(KCCTL_EXTENSION_ENABLED, false);
+    }
+
+    @Override
+    public List<ProviderConfigProperty> getConfigMetadata() {
+        return ProviderConfigurationBuilder.create()
+            .property()
+            .name(KCCTL_EXTENSION_ENABLED)
+            .type("boolean")
+            .helpText("Serve the kcctl extension manifest at /admin/realms/{realm}/api-keys/kcctl-extension.")
+            .defaultValue(false)
+            .add()
+            .build();
     }
 
     @Override

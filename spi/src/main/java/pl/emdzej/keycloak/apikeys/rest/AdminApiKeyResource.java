@@ -58,11 +58,14 @@ public class AdminApiKeyResource {
     private final RealmModel realm;
     private final AdminPermissionEvaluator auth;
     private final ApiKeyService apiKeyService;
+    private final boolean kcctlExtensionEnabled;
 
-    public AdminApiKeyResource(KeycloakSession session, RealmModel realm, AdminPermissionEvaluator auth) {
+    public AdminApiKeyResource(KeycloakSession session, RealmModel realm, AdminPermissionEvaluator auth,
+                               boolean kcctlExtensionEnabled) {
         this.session = session;
         this.realm = realm;
         this.auth = auth;
+        this.kcctlExtensionEnabled = kcctlExtensionEnabled;
         this.apiKeyService = new ApiKeyService(session);
     }
 
@@ -103,12 +106,16 @@ public class AdminApiKeyResource {
     /**
      * kcctl extension manifest, so {@code kcctl api-key ...} commands are discovered
      * automatically. Static and data-free; any realm viewer may read it.
+     * Off unless the {@code kcctl-extension-enabled} provider option is set.
      */
     @GET
     @Path("kcctl-extension")
     @Produces(KCCTL_MANIFEST_MEDIA_TYPE)
     public Response kcctlExtension() {
         auth.realm().requireViewRealm();
+        if (!kcctlExtensionEnabled) {
+            throw new NotFoundException();
+        }
         return Response.ok(KCCTL_MANIFEST, KCCTL_MANIFEST_MEDIA_TYPE).build();
     }
 

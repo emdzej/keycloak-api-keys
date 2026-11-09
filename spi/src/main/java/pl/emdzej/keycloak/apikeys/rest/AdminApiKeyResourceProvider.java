@@ -24,14 +24,16 @@ import org.keycloak.services.resources.admin.fgap.AdminPermissionEvaluator;
 
 public class AdminApiKeyResourceProvider implements AdminRealmResourceProvider {
     private final KeycloakSession session;
+    private final boolean kcctlExtensionEnabled;
 
-    public AdminApiKeyResourceProvider(KeycloakSession session) {
+    public AdminApiKeyResourceProvider(KeycloakSession session, boolean kcctlExtensionEnabled) {
         this.session = session;
+        this.kcctlExtensionEnabled = kcctlExtensionEnabled;
     }
 
     @Override
     public Object getResource(KeycloakSession session, RealmModel realm, AdminPermissionEvaluator auth, AdminEventBuilder adminEvent) {
-        return new AdminApiKeyResource(session, realm, auth);
+        return new AdminApiKeyResource(session, realm, auth, kcctlExtensionEnabled);
     }
 
     @Override

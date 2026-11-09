@@ -3,7 +3,7 @@ title: SPI Configuration
 description: Server-level setup for the Keycloak API Keys extension — providers, hashing pepper, rate-limit cache, events and metrics.
 ---
 
-The extension has **no `spi-*` configuration options**. None of its provider factories read from Keycloak's `Config.Scope`, so there is nothing to put in `keycloak.conf` or `KC_SPI_*` variables. Server-level behaviour is controlled by one environment variable, one Infinispan cache, and a few realm attributes.
+The extension has one `spi-*` option, which turns on the kcctl manifest endpoint. Everything else at server level is controlled by one environment variable, one Infinispan cache, and a few realm attributes.
 
 ## Registered Providers
 
@@ -17,6 +17,25 @@ Deploying the JAR registers these providers. You don't need to enable or select 
 | `jpa-entity-provider` | `api-key-entity-provider` | `api_key`, `api_key_roles`, `api_key_scopes` tables (Liquibase changelog) |
 | `rateLimiter` (custom) | `default` | Rate limiting for token exchanges |
 | `apiKeyMetrics` (custom) | `default` | Micrometer metrics |
+
+## Provider Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `spi-admin-realm-restapi-extension--api-keys--kcctl-extension-enabled` | `false` | Serve the [kcctl manifest](/keycloak-api-keys/api/admin/#kcctl-extension) at `/admin/realms/{realm}/api-keys/kcctl-extension`. When off, the endpoint returns `404`. |
+
+Set it like any Keycloak option:
+
+```bash
+# command line
+kc.sh start --spi-admin-realm-restapi-extension--api-keys--kcctl-extension-enabled=true
+
+# environment variable
+KC_SPI_ADMIN_REALM_RESTAPI_EXTENSION__API_KEYS__KCCTL_EXTENSION_ENABLED=true
+
+# keycloak.conf
+spi-admin-realm-restapi-extension--api-keys--kcctl-extension-enabled=true
+```
 
 ## Hashing Pepper
 

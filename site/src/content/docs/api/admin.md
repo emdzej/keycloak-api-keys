@@ -189,6 +189,8 @@ Authorization: Bearer {token}
 GET /admin/realms/{realm}/api-keys/kcctl-extension
 ```
 
+Off by default. Enable it with the `spi-admin-realm-restapi-extension--api-keys--kcctl-extension-enabled=true` option (see [SPI Configuration](/keycloak-api-keys/configuration/spi/#provider-options)); otherwise it returns `404`.
+
 Returns a static [kcctl](https://github.com/emdzej/kcctl) extension manifest (`application/yaml`) describing the endpoints on this page. See kcctl's [extension docs](https://github.com/emdzej/kcctl/blob/main/docs/extensions.md#adding-kcctl-support-to-your-spi). kcctl fetches it with `kcctl extension discover`, which also runs after `kcctl auth login`. The `api-key` commands then become available:
 
 ```bash
