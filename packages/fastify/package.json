@@ -34,7 +34,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/emdzej/keycloak-api-keys.git",
+    "url": "git+https://github.com/emdzej/keycloak-api-keys.git",
     "directory": "packages/fastify"
   },
   "homepage": "https://github.com/emdzej/keycloak-api-keys#readme",

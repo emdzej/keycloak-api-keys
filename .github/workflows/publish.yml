@@ -45,11 +45,17 @@ jobs:
 
   # ── Node: build, test, publish to npmjs.org (OIDC trusted publishing) ───────
   publish-npm:
-    name: Publish npm packages
+    name: Publish ${{ matrix.package }} to npm
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    strategy:
+      # Each package has its own trusted-publisher config on npmjs.com; one
+      # misconfigured package must not block the others.
+      fail-fast: false
+      matrix:
+        package: [express, fastify, hono]
     steps:
       - uses: actions/checkout@v4
 
@@ -67,31 +73,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build and test
-        run: pnpm build && pnpm test
+        run: pnpm --filter "./packages/${{ matrix.package }}" build && pnpm --filter "./packages/${{ matrix.package }}" test
 
-      - name: Set package versions
-        run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            TAG="${{ github.event.release.tag_name }}"
-            VERSION="${TAG}"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          for pkg in packages/express packages/fastify packages/hono; do
-            pnpm --filter "./$pkg" exec npm version "$VERSION" --no-git-tag-version --allow-same-version
-          done
+      - name: Set package version
+        working-directory: packages/${{ matrix.package }}
+        run: npm version "${{ inputs.version || github.event.release.tag_name }}" --no-git-tag-version --allow-same-version
 
-      - name: Publish @emdzej/keycloak-api-keys-express
-        working-directory: packages/express
-        run: npm publish --access public --provenance
-
-      - name: Publish @emdzej/keycloak-api-keys-fastify
-        working-directory: packages/fastify
-        run: npm publish --access public --provenance
-
-      - name: Publish @emdzej/keycloak-api-keys-hono
-        working-directory: packages/hono
+      - name: Publish @emdzej/keycloak-api-keys-${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
         run: npm publish --access public --provenance
 
   # ── .NET: build, test, publish to NuGet.org ─────────────────────────────────
@@ -122,9 +111,17 @@ jobs:
             -p:Version="$VERSION" \
             --output packages/dotnet/nupkg
 
+      # Trusted publishing: exchanges the GitHub OIDC token for a short-lived
+      # NuGet API key (policy: owner emdzej, repo keycloak-api-keys, publish.yml).
+      - name: NuGet login (OIDC)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: emdzej
+
       - name: Publish to NuGet.org
         run: |
           dotnet nuget push packages/dotnet/nupkg/*.nupkg \
             --source "https://api.nuget.org/v3/index.json" \
-            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
