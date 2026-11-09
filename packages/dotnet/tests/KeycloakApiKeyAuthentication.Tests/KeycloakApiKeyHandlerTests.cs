@@ -84,6 +84,8 @@ public sealed class KeycloakApiKeyHandlerTests : IAsyncLifetime
             await ctx.Response.WriteAsync($"sub={sub};roles={roles}");
         });
 
+        app.MapGet("/protected", (ClaimsPrincipal user) => "ok").RequireAuthorization();
+
         await app.StartAsync();
         _server = app.GetTestServer();
         _client = _server.CreateClient();
@@ -167,12 +169,28 @@ public sealed class KeycloakApiKeyHandlerTests : IAsyncLifetime
     // ── Rate limiting ─────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RateLimitedKey_Returns401_AndForwardsRetryAfterHeader()
+    public async Task RateLimitedKey_OnProtectedEndpoint_Returns429_AndForwardsRetryAfterHeader()
     {
-        var response = await GetWithKey(RateLimitedKey);
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/protected");
+        request.Headers.Add("X-API-Key", RateLimitedKey);
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
         Assert.True(response.Headers.Contains("Retry-After"),
             "Retry-After header should be forwarded from Keycloak 429 response");
+        Assert.False(response.Headers.Contains("WWW-Authenticate"),
+            "a rate-limited request is not an authentication challenge");
+    }
+
+    [Fact]
+    public async Task InvalidKey_OnProtectedEndpoint_Returns401WithChallenge()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/protected");
+        request.Headers.Add("X-API-Key", InvalidKey);
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True(response.Headers.Contains("WWW-Authenticate"));
     }
 
     // ── Options validation ────────────────────────────────────────────────────

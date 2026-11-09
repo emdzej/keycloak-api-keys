@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +20,12 @@ public sealed class KeycloakApiKeyHandler : AuthenticationHandler<KeycloakApiKey
     /// <summary>
     /// The name used to register rate-limit response headers when Keycloak returns 429.
     /// </summary>
+    /// <summary>
+    /// <see cref="HttpContext.Items"/> key set when Keycloak rate-limited the exchange, so the
+    /// challenge can answer 429 instead of 401.
+    /// </summary>
+    internal const string RateLimitedItemKey = "KeycloakApiKey.RateLimited";
+
     private static readonly string[] RateLimitHeaderNames =
     [
         "Retry-After",
@@ -83,6 +90,7 @@ public sealed class KeycloakApiKeyHandler : AuthenticationHandler<KeycloakApiKey
                     Response.Headers[name] = values.FirstOrDefault();
             }
 
+            Context.Items[RateLimitedItemKey] = true;
             Logger.LogWarning("API key exchange rate-limited by Keycloak (429).");
             return AuthenticateResult.Fail("Rate limit exceeded.");
         }
@@ -101,6 +109,13 @@ public sealed class KeycloakApiKeyHandler : AuthenticationHandler<KeycloakApiKey
     /// <inheritdoc />
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
+        if (Context.Items.ContainsKey(RateLimitedItemKey))
+        {
+            // Rate-limit headers were already copied from Keycloak's response.
+            Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            return Task.CompletedTask;
+        }
+
         Response.StatusCode = 401;
         Response.Headers.WWWAuthenticate = $"ApiKey realm=\"{Options.Realm}\"";
         return Task.CompletedTask;
