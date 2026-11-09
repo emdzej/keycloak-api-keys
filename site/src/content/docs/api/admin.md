@@ -189,7 +189,7 @@ Authorization: Bearer {token}
 GET /admin/realms/{realm}/api-keys/kcctl-extension
 ```
 
-Returns a static kcctl extension manifest (`application/yaml`) describing the endpoints on this page. kcctl fetches it with `kcctl extension discover`, which also runs after `kcctl auth login`. The `api-key` commands then become available:
+Returns a static [kcctl](https://github.com/emdzej/kcctl) extension manifest (`application/yaml`) describing the endpoints on this page. See kcctl's [extension docs](https://github.com/emdzej/kcctl/blob/main/docs/extensions.md#adding-kcctl-support-to-your-spi). kcctl fetches it with `kcctl extension discover`, which also runs after `kcctl auth login`. The `api-key` commands then become available:
 
 ```bash
 kcctl api-key list --user alice --status active
@@ -198,7 +198,7 @@ kcctl api-key stats <id>
 kcctl api-key revoke <id>
 ```
 
-`create` prints the plain key once, like the REST response. Requires `view-realm`.
+`create` prints the plain key once, like the REST response. Requires `view-realm` and kcctl 0.2.0 or later. With older setups, or without discovery, install the manifest manually: `kcctl extension install kcctl-extension.yaml` (from `spi/src/main/resources/`).
 
 ## OpenAPI
 
