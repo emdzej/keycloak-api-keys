@@ -39,6 +39,7 @@ import pl.emdzej.keycloak.apikeys.events.ApiKeyRevokedEvent;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreateRequest;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyRepository;
+import pl.emdzej.keycloak.apikeys.jpa.ApiKeyStatus;
 import pl.emdzej.keycloak.apikeys.jpa.JpaApiKeyRepository;
 import pl.emdzej.keycloak.apikeys.metrics.ApiKeyMetrics;
 import pl.emdzej.keycloak.apikeys.metrics.ApiKeyMetricsProvider;
@@ -107,16 +108,21 @@ public class ApiKeyService {
                 }
             }
         }
-        if (request.getExpiresAt() != null) {
+        Instant expiresAt = request.getExpiresAt();
+        if (expiresAt != null) {
             Instant now = Instant.now();
-            if (!request.getExpiresAt().isAfter(now)) {
+            if (!expiresAt.isAfter(now)) {
                 throw new BadRequestException("expiresAt must be in the future");
             }
             long maxTtlSeconds = resolveMaxTtlSeconds(realm);
-            if (request.getExpiresAt().isAfter(now.plusSeconds(maxTtlSeconds))) {
+            if (expiresAt.isAfter(now.plusSeconds(maxTtlSeconds))) {
                 throw new BadRequestException(
                     "expiresAt exceeds the maximum allowed TTL of " + (maxTtlSeconds / 86400) + " days");
             }
+        } else if (configuredMaxTtlSeconds(realm) != null) {
+            // An explicit realm max TTL means no key may live longer, including keys created
+            // without an expiry. Without the attribute, non-expiring keys stay allowed.
+            expiresAt = Instant.now().plusSeconds(configuredMaxTtlSeconds(realm));
         }
 
         ClientModel client = session.clients().getClientByClientId(realm, request.getClientId());
@@ -155,7 +161,7 @@ public class ApiKeyService {
             realm.getId(),
             roles,
             scopes,
-            request.getExpiresAt(),
+            expiresAt,
             null,
             Instant.now(),
             null,
@@ -183,13 +189,13 @@ public class ApiKeyService {
     }
 
     public List<ApiKeyEntity> findByRealm(RealmModel realm, String userId, String clientId,
-                                          Boolean active) {
-        return repository.findByRealmFiltered(realm.getId(), userId, clientId, active, 0, 0);
+                                          ApiKeyStatus status) {
+        return repository.findByRealmFiltered(realm.getId(), userId, clientId, status, 0, 0);
     }
 
     public List<ApiKeyEntity> findByRealm(RealmModel realm, String userId, String clientId,
-                                          Boolean active, int first, int max) {
-        return repository.findByRealmFiltered(realm.getId(), userId, clientId, active, first, max);
+                                          ApiKeyStatus status, int first, int max) {
+        return repository.findByRealmFiltered(realm.getId(), userId, clientId, status, first, max);
     }
 
     public ApiKeyEntity findById(RealmModel realm, String id) {
@@ -254,6 +260,9 @@ public class ApiKeyService {
         if (entity == null) {
             throw new NotFoundException("API key not found");
         }
+        if (entity.getRevokedAt() != null) {
+            return; // already revoked: keep the original revokedAt and don't emit a second event
+        }
         entity.setRevokedAt(Instant.now());
         ApiKeyEntity saved = repository.save(entity);
         updateKeyCounts(realm, saved.getClientId());
@@ -273,6 +282,9 @@ public class ApiKeyService {
         }
         if (!Objects.equals(entity.getUserId(), user.getId())) {
             throw new ForbiddenException("API key does not belong to user");
+        }
+        if (entity.getRevokedAt() != null) {
+            return; // already revoked: keep the original revokedAt and don't emit a second event
         }
         entity.setRevokedAt(Instant.now());
         ApiKeyEntity saved = repository.save(entity);
@@ -433,16 +445,22 @@ public class ApiKeyService {
      * {@code apiKeysMaxTtlSeconds}, falling back to {@link #DEFAULT_MAX_TTL_SECONDS}.
      */
     private static long resolveMaxTtlSeconds(RealmModel realm) {
+        Long configured = configuredMaxTtlSeconds(realm);
+        return configured != null ? configured : DEFAULT_MAX_TTL_SECONDS;
+    }
+
+    /** The realm's {@code apiKeysMaxTtlSeconds} when set to a positive number, otherwise {@code null}. */
+    private static Long configuredMaxTtlSeconds(RealmModel realm) {
         String attr = realm.getAttribute("apiKeysMaxTtlSeconds");
-        if (attr != null && !attr.isBlank()) {
-            try {
-                long v = Long.parseLong(attr.trim());
-                if (v > 0) return v;
-            } catch (NumberFormatException ignored) {
-                // fall through to default
-            }
+        if (attr == null || attr.isBlank()) {
+            return null;
         }
-        return DEFAULT_MAX_TTL_SECONDS;
+        try {
+            long v = Long.parseLong(attr.trim());
+            return v > 0 ? v : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private static void requireNotBlank(String value, String message) {

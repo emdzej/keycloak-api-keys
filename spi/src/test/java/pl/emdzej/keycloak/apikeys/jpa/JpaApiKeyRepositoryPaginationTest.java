@@ -140,13 +140,32 @@ class JpaApiKeyRepositoryPaginationTest {
             when(query.setMaxResults(anyInt())).thenReturn(query);
             when(query.getResultList()).thenReturn(List.of());
 
-            repository.findByRealmFiltered("realm-1", null, null, true, 0, 0);
+            repository.findByRealmFiltered("realm-1", null, null, ApiKeyStatus.ACTIVE, 0, 0);
 
             verify(em).createQuery(
                 org.mockito.ArgumentMatchers.argThat(jpql ->
                     jpql instanceof String s
-                    && s.contains("revokedAt is null")),
+                    && s.contains("revokedAt is null")
+                    && s.contains("k.expiresAt is null or k.expiresAt > :now")),
                 eq(ApiKeyEntity.class));
+        }
+
+        @Test
+        void expiredFilterSelectsUnrevokedKeysPastExpiry() {
+            @SuppressWarnings("unchecked")
+            TypedQuery<ApiKeyEntity> query = mock(TypedQuery.class);
+            when(em.createQuery(anyString(), eq(ApiKeyEntity.class))).thenReturn(query);
+            when(query.setParameter(anyString(), any())).thenReturn(query);
+            when(query.getResultList()).thenReturn(List.of());
+
+            repository.findByRealmFiltered("realm-1", null, null, ApiKeyStatus.EXPIRED, 0, 0);
+
+            verify(em).createQuery(
+                org.mockito.ArgumentMatchers.argThat(jpql ->
+                    jpql instanceof String s
+                    && s.contains("k.revokedAt is null and k.expiresAt <= :now")),
+                eq(ApiKeyEntity.class));
+            verify(query).setParameter(eq("now"), any(java.time.Instant.class));
         }
 
         @Test
@@ -159,7 +178,7 @@ class JpaApiKeyRepositoryPaginationTest {
             when(query.setMaxResults(anyInt())).thenReturn(query);
             when(query.getResultList()).thenReturn(List.of());
 
-            repository.findByRealmFiltered("realm-1", null, null, false, 0, 0);
+            repository.findByRealmFiltered("realm-1", null, null, ApiKeyStatus.REVOKED, 0, 0);
 
             verify(em).createQuery(
                 org.mockito.ArgumentMatchers.argThat(jpql ->

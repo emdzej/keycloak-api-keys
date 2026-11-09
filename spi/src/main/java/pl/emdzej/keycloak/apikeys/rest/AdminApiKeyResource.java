@@ -44,6 +44,7 @@ import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreateRequest;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyCreatedResponse;
 import pl.emdzej.keycloak.apikeys.dto.ApiKeyStatsResponse;
 import pl.emdzej.keycloak.apikeys.jpa.ApiKeyEntity;
+import pl.emdzej.keycloak.apikeys.jpa.ApiKeyStatus;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiter;
 import pl.emdzej.keycloak.apikeys.ratelimit.RateLimiterProvider;
 
@@ -71,9 +72,9 @@ public class AdminApiKeyResource {
                                           @QueryParam("max") @DefaultValue("25") int max) {
         auth.realm().requireViewRealm();
 
-        Boolean active = parseStatus(status);
+        ApiKeyStatus keyStatus = parseStatus(status);
 
-        return apiKeyService.findByRealm(realm, userId, clientId, active, first, max)
+        return apiKeyService.findByRealm(realm, userId, clientId, keyStatus, first, max)
             .stream()
             .map(AdminApiKeyResource::toAdminResponse)
             .collect(Collectors.toList());
@@ -130,7 +131,6 @@ public class AdminApiKeyResource {
 
     @DELETE
     @Path("{keyId}")
-    @Consumes(MediaType.APPLICATION_JSON)
     public Response revoke(@PathParam("keyId") String keyId) {
         auth.realm().requireManageRealm();
 
@@ -153,18 +153,16 @@ public class AdminApiKeyResource {
         );
     }
 
-    private static Boolean parseStatus(String status) {
+    private static ApiKeyStatus parseStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
         }
-        String normalized = status.trim().toLowerCase(Locale.ROOT);
-        if ("active".equals(normalized)) {
-            return true;
-        }
-        if ("revoked".equals(normalized)) {
-            return false;
-        }
-        throw new BadRequestException("Unsupported status filter: " + status);
+        return switch (status.trim().toLowerCase(Locale.ROOT)) {
+            case "active" -> ApiKeyStatus.ACTIVE;
+            case "revoked" -> ApiKeyStatus.REVOKED;
+            case "expired" -> ApiKeyStatus.EXPIRED;
+            default -> throw new BadRequestException("Unsupported status filter: " + status);
+        };
     }
 
     private static ApiKeyCreatedResponse toCreatedResponse(ApiKeyService.CreatedApiKey created) {

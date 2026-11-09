@@ -16,6 +16,7 @@
 
 package pl.emdzej.keycloak.apikeys.jpa;
 
+import java.time.Instant;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import java.util.ArrayList;
@@ -82,17 +83,25 @@ public class JpaApiKeyRepository implements ApiKeyRepository {
 
     @Override
     public List<ApiKeyEntity> findByRealmFiltered(String realmId, String userId, String clientId,
-                                                  Boolean active, int first, int max) {
+                                                  ApiKeyStatus status, int first, int max) {
         StringBuilder jpql = new StringBuilder(
             "select k from ApiKeyEntity k where k.realmId = :realmId");
         if (userId != null)   jpql.append(" and k.userId = :userId");
         if (clientId != null) jpql.append(" and k.clientId = :clientId");
-        if (Boolean.TRUE.equals(active))  jpql.append(" and k.revokedAt is null");
-        if (Boolean.FALSE.equals(active)) jpql.append(" and k.revokedAt is not null");
+        if (status != null) {
+            jpql.append(switch (status) {
+                case ACTIVE  -> " and k.revokedAt is null and (k.expiresAt is null or k.expiresAt > :now)";
+                case REVOKED -> " and k.revokedAt is not null";
+                case EXPIRED -> " and k.revokedAt is null and k.expiresAt <= :now";
+            });
+        }
         jpql.append(" order by k.createdAt desc");
 
         TypedQuery<ApiKeyEntity> query = em.createQuery(jpql.toString(), ApiKeyEntity.class)
             .setParameter("realmId", realmId);
+        if (status == ApiKeyStatus.ACTIVE || status == ApiKeyStatus.EXPIRED) {
+            query.setParameter("now", Instant.now());
+        }
         if (userId != null)   query.setParameter("userId", userId);
         if (clientId != null) query.setParameter("clientId", clientId);
         if (first > 0) query.setFirstResult(first);
@@ -114,11 +123,13 @@ public class JpaApiKeyRepository implements ApiKeyRepository {
         return em.createQuery(
                 "select count(k) from ApiKeyEntity k " +
                 "where k.realmId = :realmId and k.userId = :userId " +
-                "and k.clientId = :clientId and k.revokedAt is null",
+                "and k.clientId = :clientId and k.revokedAt is null " +
+                "and (k.expiresAt is null or k.expiresAt > :now)",
                 Long.class)
             .setParameter("realmId", realmId)
             .setParameter("userId", userId)
             .setParameter("clientId", clientId)
+            .setParameter("now", Instant.now())
             .getSingleResult();
     }
 
