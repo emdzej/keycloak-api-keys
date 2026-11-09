@@ -85,7 +85,7 @@ app.MapGet("/api/reports", () => ...).RequireAuthorization("ReportsReader");
 |-----------|----------|
 | No key | No result. Other schemes can authenticate, otherwise the challenge returns `401` |
 | Unknown, revoked or expired key, or wrong client | `401` with `WWW-Authenticate: ApiKey realm="…"` |
-| Rate limit exceeded | `401`, with Keycloak's `X-RateLimit-*` headers forwarded |
+| Rate limit exceeded | `429`, with Keycloak's `Retry-After` and `X-RateLimit-*` headers forwarded |
 | Authenticated but fails a policy | `403` |
 
 ## Custom cache

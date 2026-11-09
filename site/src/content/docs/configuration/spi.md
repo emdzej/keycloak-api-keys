@@ -43,22 +43,25 @@ Once keys are stored as HMAC hashes, removing or changing `API_KEY_PEPPER` makes
 
 ## Rate-Limit Cache
 
-The rate limiter uses an Infinispan cache named `api-keys-rate-limit`. The extension does not ship a cache definition, so add one to your Infinispan configuration:
+The rate limiter keeps its counters in an Infinispan cache named `api-keys-rate-limit`. If your Keycloak cache configuration doesn't define it, the extension creates it when it's first used:
+
+- **Clustered Keycloak** (the default `ispn` cache stack with `kc.sh start`): a `distributed-cache` in `SYNC` mode, so limits apply across all nodes.
+- **Single node** (`start-dev`, or `--cache=local`): a `local-cache`.
+
+Each counter expires at the end of its window (second, minute, hour or day). To tune the cache, for example to cap its memory, define it yourself in the Keycloak cache config file and that definition is used instead:
 
 ```xml
-<local-cache name="api-keys-rate-limit">
-    <expiration lifespan="86400000"/>
-    <memory max-count="10000"/>
-</local-cache>
+<distributed-cache name="api-keys-rate-limit" owners="2">
+    <expiration lifespan="86460000"/>
+    <memory max-count="100000"/>
+</distributed-cache>
 ```
-
-Each entry sets its own lifespan to match its window (minute, hour or day). Use a distributed or replicated cache if you want limits enforced across the whole cluster.
 
 If the cache can't be obtained, behaviour depends on the realm attribute `apiKeysRateLimitFailClosed`:
 
 | `apiKeysRateLimitFailClosed` | Behaviour when Infinispan is unavailable |
 |------------------------------|------------------------------------------|
-| unset / `false` | Falls back to an in-memory limiter |
+| unset / `false` | Falls back to an in-memory limiter. Limits still apply, but each node counts separately |
 | `true` | Every token exchange is rejected with `503 service_unavailable` |
 
 Use `GET /admin/realms/{realm}/api-keys/health` to check the cache status. See [Admin API](/keycloak-api-keys/api/admin/#health).
@@ -92,7 +95,17 @@ The extension writes to the Keycloak event store. Events are saved only if the r
 | `API_KEY_EXPIRED_REJECTED` | `OAUTH2_EXTENSION_GRANT_ERROR` (`invalid_token`) | `api_key_id` |
 | `API_KEY_EXCHANGE_UNAVAILABLE` | `OAUTH2_EXTENSION_GRANT_ERROR` (`not_allowed`) | `reason=rate_limiter_unhealthy` |
 
-Other rejected exchanges, such as an unknown or revoked key, a client mismatch or a disabled user, are recorded as `OAUTH2_EXTENSION_GRANT_ERROR` without an `api_key_event` detail. The `reason` detail holds the error message returned to the caller (for example `Invalid API key or unauthorized`), not the specific cause.
+Other rejected exchanges are recorded as `OAUTH2_EXTENSION_GRANT_ERROR` without an `api_key_event` detail. Their `reason` detail names the specific cause, even though the caller only ever sees the generic `Invalid API key or unauthorized`:
+
+| `reason` | Cause |
+|----------|-------|
+| `api_key_missing` | No `api_key` parameter |
+| `api_key_not_found` | No key with this value |
+| `realm_mismatch` | The key belongs to another realm |
+| `api_key_revoked` | The key was revoked |
+| `api_key_expired` | The key is past `expiresAt` |
+| `client_id_mismatch` | The key was issued for a different client |
+| `user_not_found` / `user_disabled` | The key's owner was deleted or disabled |
 
 Custom providers can also subscribe to these `ProviderEvent` records on the session factory: `ApiKeyCreatedEvent`, `ApiKeyRevokedEvent`, `ApiKeyExchangedEvent`, `ApiKeyRateLimitedEvent` and `ApiKeyExpiredRejectedEvent`.
 

@@ -164,6 +164,6 @@ public List<Report> reports() { ... }
 |-----------|--------|
 | No key | Request continues unauthenticated, and your rules decide (usually `401`) |
 | Unknown, revoked or expired key, or wrong client | `401 Unauthorized` |
-| Rate limit exceeded | `429 Too Many Requests` with rate limit headers forwarded from Keycloak |
+| Rate limit exceeded | `429 Too Many Requests` with `Retry-After` and `X-RateLimit-*` headers forwarded from Keycloak |
 
 Because a request without a key simply passes through, you can put API key auth in the same chain as other mechanisms, such as JWT bearer tokens.

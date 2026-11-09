@@ -45,15 +45,11 @@ Authorization: Bearer {token}
 |-----------------|---------|-------------|
 | `userId` | — | Filter by owner user ID |
 | `clientId` | — | Filter by client ID (the `clientId` string, not the internal UUID) |
-| `status` | — | `active` (not revoked) or `revoked`. Any other value returns `400`. |
+| `status` | — | `active` (not revoked and not expired), `revoked`, or `expired` (not revoked, past `expiresAt`). Any other value returns `400`. |
 | `first` | `0` | Offset |
 | `max` | `25` | Page size. `0` or negative returns all matches. |
 
 Results are ordered by `createdAt`, newest first.
-
-:::note
-`status=active` means "not revoked". Expired keys are included.
-:::
 
 **Response `200`:**
 
@@ -65,9 +61,9 @@ Results are ordered by `createdAt`, newest first.
     "userId": "e99f5394-1234-4abc-b678-9d0b1234abcd",
     "clientId": "my-app",
     "keyPrefix": "myapp_",
-    "createdAt": "2026-01-15T08:00:00Z",
-    "expiresAt": "2027-01-15T08:00:00Z",
-    "lastUsedAt": "2026-03-17T10:30:00Z",
+    "createdAt": 1768464000.123456000,
+    "expiresAt": 1800000000.000000000,
+    "lastUsedAt": 1773743400.987654000,
     "revokedAt": null,
     "usageCount": 42
   }
@@ -81,7 +77,7 @@ Results are ordered by `createdAt`, newest first.
 | `userId` | Owner's user ID |
 | `clientId` | Client the key is bound to |
 | `keyPrefix` | Derived prefix plus `_`. See [Key Prefixes](/keycloak-api-keys/configuration/prefixes/) |
-| `createdAt` / `expiresAt` / `lastUsedAt` / `revokedAt` | Timestamps. `expiresAt: null` means the key never expires. A non-null `revokedAt` means the key is revoked. |
+| `createdAt` / `expiresAt` / `lastUsedAt` / `revokedAt` | Timestamps as epoch seconds with a fractional part. `expiresAt: null` means the key never expires. A non-null `revokedAt` means the key is revoked. |
 | `usageCount` | Number of successful token exchanges |
 
 ## Create Key for User
@@ -108,7 +104,7 @@ curl -X POST \
 | `clientId` | Yes | An existing, enabled client. The **user** must have a role mapping on it, unless the client is public. |
 | `roles` | No | At most 20, each at most 100 characters. Each name is looked up as a client role, then as a realm role, and the user must hold it. Empty or omitted means the token carries no roles. |
 | `scopes` | No | At most 20, each at most 100 characters. Each must be a default or optional scope of the client. Empty or omitted means default scopes only. |
-| `expiresAt` | No | ISO 8601. Must be in the future and no later than the realm's `apiKeysMaxTtlSeconds` (default 365 days). Omit it for a key that never expires. |
+| `expiresAt` | No | ISO 8601, for example `2027-01-15T08:00:00Z`. Must be in the future and no later than the realm's `apiKeysMaxTtlSeconds` (default 365 days). If omitted, the key never expires, unless the realm sets `apiKeysMaxTtlSeconds` explicitly, in which case the key gets that lifetime. |
 
 A user can have at most **25 non-revoked keys per client**.
 
@@ -121,8 +117,8 @@ A user can have at most **25 non-revoked keys per client**.
   "name": "CI pipeline",
   "clientId": "my-app",
   "keyPrefix": "myapp_",
-  "createdAt": "2026-01-15T08:00:00Z",
-  "expiresAt": "2027-01-15T08:00:00Z",
+  "createdAt": 1768464000.123456000,
+  "expiresAt": 1800000000.000000000,
   "lastUsedAt": null,
   "usageCount": 0
 }
@@ -142,7 +138,7 @@ curl -X DELETE \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-**Response:** `204 No Content`, or `404` if the key does not exist in this realm. Revoked keys are rejected on their next token exchange.
+**Response:** `204 No Content`, or `404` if the key does not exist in this realm. Revoked keys are rejected on their next token exchange. Revoking an already revoked key also returns `204`, keeps the original `revokedAt`, and emits no second event.
 
 ## Get Key Stats
 
@@ -185,7 +181,7 @@ Authorization: Bearer {token}
 |-------|-------------|
 | `status` | Always `UP` if the endpoint responds |
 | `keysCount` | Total keys stored for the realm, including revoked and expired keys |
-| `cacheStatus` | `UP` if the rate limiter is healthy. `DOWN` if it is not, for example when the `api-keys-rate-limit` cache is unavailable and `apiKeysRateLimitFailClosed=true`. The in-memory fallback, used when fail-closed is off, also reports `UP`. See [SPI Configuration](/keycloak-api-keys/configuration/spi/#rate-limit-cache). |
+| `cacheStatus` | `UP` if the rate limiter is healthy. `DOWN` if it is not, for example when the `api-keys-rate-limit` cache is unavailable and `apiKeysRateLimitFailClosed=true`. The in-memory fallback, used when fail-closed is off, also reports `UP`: it enforces limits, but per node only. See [SPI Configuration](/keycloak-api-keys/configuration/spi/#rate-limit-cache). |
 
 ## Errors
 

@@ -34,8 +34,8 @@ Extend Keycloak with:
 ```
 ApiKey {
   id: UUID                    # Internal ID
-  keyHash: String             # SHA-256 hash of the key (never store plain)
-  keyPrefix: String           # First 8 chars for identification (e.g., "myapp_a1b2")
+  keyHash: String             # HMAC-SHA-256 (with API_KEY_PEPPER) or SHA-256 hash of the key; never stored plain
+  keyPrefix: String           # Sanitised client ID plus "_" (e.g., "myapp_")
   name: String                # User-friendly name (e.g., "CI/CD Pipeline")
 
   userId: String              # Owner user ID
@@ -72,7 +72,7 @@ Components:
 ### Storage
 
 - **Database**: Keycloak's JPA entity, tables created via Liquibase on startup
-- **Hashing**: SHA-256 (key is shown once on creation, then only the hash is stored)
+- **Hashing**: HMAC-SHA-256 when `API_KEY_PEPPER` is set, otherwise SHA-256 (key is shown once on creation, then only the hash is stored)
 - **Indexes**: `key_hash` (unique), `realm_id + user_id`, `realm_id`
 - **Collection tables**: `api_key_roles`, `api_key_scopes` (FK → `api_key.id`, CASCADE DELETE)
 
@@ -98,7 +98,7 @@ Response 200: [
   {
     "id": "uuid",
     "name": "CI Pipeline",
-    "keyPrefix": "myapp_a1b2",
+    "keyPrefix": "myapp_",
     "clientId": "my-app",
     "roles": ["user", "api-access"],
     "scopes": ["read", "write"],
@@ -129,7 +129,7 @@ Response 201: {
   "key": "myapp_a1b2c3d4...",           // ⚠️ Only returned ONCE
   "name": "CI Pipeline",
   "clientId": "my-app",
-  "keyPrefix": "myapp_a1b2",
+  "keyPrefix": "myapp_",
   "createdAt": "...",
   "expiresAt": "..."
 }
@@ -159,7 +159,7 @@ Base path: `/admin/realms/{realm}/api-keys`
 
 #### List All Keys
 ```
-GET /admin/realms/{realm}/api-keys?userId={userId}&clientId={clientId}&status=active|revoked
+GET /admin/realms/{realm}/api-keys?userId={userId}&clientId={clientId}&status=active|revoked|expired
 Authorization: Bearer {admin_token}
 
 Response 200: [
@@ -168,7 +168,7 @@ Response 200: [
     "name": "CI Pipeline",
     "userId": "user-uuid",
     "clientId": "my-app",
-    "keyPrefix": "myapp_a1b2",
+    "keyPrefix": "myapp_",
     "createdAt": "...",
     "expiresAt": "...",
     "lastUsedAt": "...",
@@ -271,7 +271,7 @@ per-key → client → realm → built-in defaults
 | Per minute | 60 |
 | Per hour | 1000 |
 | Per day | 10000 |
-| Burst | 10 |
+| Burst (per second) | 10 |
 
 ### Response on Limit
 
@@ -287,15 +287,21 @@ Headers:
 
 ### Infinispan Cache
 
-The rate limiter uses an Infinispan cache named `api-keys-rate-limit`. In `start-dev` mode
-Keycloak falls back to an in-memory cache automatically. For production, add to `infinispan.xml`:
+The rate limiter uses an Infinispan cache named `api-keys-rate-limit`. If the Keycloak cache
+configuration doesn't define it, it is created on first use: `DIST_SYNC` when Keycloak is
+clustered, `LOCAL` otherwise. Counters are plain `Long` values in epoch-aligned fixed windows
+(second, minute, hour, day), each expiring at the end of its window. To tune it, define it
+yourself in the cache config file:
 
 ```xml
-<local-cache name="api-keys-rate-limit">
-    <expiration lifespan="60000"/>
-    <memory max-count="10000"/>
-</local-cache>
+<distributed-cache name="api-keys-rate-limit" owners="2">
+    <expiration lifespan="86460000"/>
+    <memory max-count="100000"/>
+</distributed-cache>
 ```
+
+`0` or a negative limit disables that window. If Infinispan is unavailable, a per-node in-memory
+limiter is used, or every exchange fails with `503` when `apiKeysRateLimitFailClosed=true`.
 
 ---
 
@@ -319,7 +325,7 @@ Keycloak `EventListenerProvider` (e.g. for Kafka or webhook forwarding).
 ## Security
 
 ### Key Storage
-- Keys are hashed with SHA-256 before storage — the plain key is never persisted
+- Keys are hashed (HMAC-SHA-256 with `API_KEY_PEPPER`, otherwise SHA-256) before storage — the plain key is never persisted
 - The plain key is returned only once, at creation time
 - There is no recovery mechanism — a lost key must be revoked and recreated
 

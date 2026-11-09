@@ -44,7 +44,7 @@ Rate limits are applied per key on each token exchange. Values are resolved fiel
 | `apiKeysRateLimitPerMinute` | `perMinute` | `60` | 1 minute |
 | `apiKeysRateLimitPerHour` | `perHour` | `1000` | 1 hour |
 | `apiKeysRateLimitPerDay` | `perDay` | `10000` | 1 day |
-| `apiKeysRateLimitBurst` | `burst` | `10` | 1 minute |
+| `apiKeysRateLimitBurst` | `burst` | `10` | 1 second |
 
 `apiKeysRateLimits` accepts either a flat object or one nested under `rateLimits`:
 
@@ -52,15 +52,12 @@ Rate limits are applied per key on each token exchange. Values are resolved fiel
 { "perMinute": 120, "perHour": 2000, "perDay": 20000, "burst": 30 }
 ```
 
-:::caution
-`burst` is enforced as its own 60-second window, alongside `perMinute`. In practice the per-minute limit is the **lower** of the two, so the defaults allow 10 exchanges per minute, not 60. Raise `burst` together with `perMinute`.
-:::
+`burst` caps short spikes: at most `burst` exchanges in any one second, on top of the per-minute, hour and day limits. With the defaults a key can make 10 calls in a second but still only 60 in a minute.
 
-- An exchange is rejected if any window is exceeded.
-- Values that are `0`, negative or non-numeric don't disable a limit:
-  - `0` and negative values replace the built-in default for that field, even when a realm value exists.
-  - Non-numeric values are skipped, and the next level is used.
-- Rejected exchanges return `429` with `error: "rate_limit_exceeded"` and a `retry_after` value in seconds.
+- An exchange is rejected if any window is exceeded. Rejected exchanges don't count against the other windows.
+- `0` or a negative value disables that window. Because the first value found wins, a client can set `0` to lift a limit that the realm sets.
+- Non-numeric values are skipped, and the next level is used.
+- Rejected exchanges return `429` with a `Retry-After` header and `error: "rate_limit_exceeded"` plus `retry_after` (seconds) in the body.
 - Successful and rejected exchanges include `X-RateLimit-Limit` (the per-minute value), `X-RateLimit-Remaining` and `X-RateLimit-Reset` (epoch seconds).
 
 ### Setting Client Attributes
@@ -89,7 +86,7 @@ These are read from the **realm**. Setting them on a client has no effect:
 
 | Attribute | Default | Description |
 |-----------|---------|-------------|
-| `apiKeysMaxTtlSeconds` | `31536000` (365 days) | Furthest allowed `expiresAt`. Keys created without `expiresAt` never expire. |
+| `apiKeysMaxTtlSeconds` | `31536000` (365 days) | Furthest allowed `expiresAt`. When set explicitly, keys created without `expiresAt` get this lifetime. When unset, they never expire. |
 | `apiKeysRateLimitFailClosed` | `false` | Reject exchanges with `503` if the rate-limit cache is unavailable |
 
 ## Example: Read-Only Keys

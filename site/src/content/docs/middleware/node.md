@@ -134,7 +134,7 @@ The TypeScript module augmentation is included, so `req.auth` is typed without e
 |-----------|----------|
 | No key in the header | `401 Unauthorized` |
 | Unknown, revoked or expired key, or wrong client | `401 Unauthorized` |
-| Rate limit exceeded | `429 Too Many Requests` with Keycloak's `X-RateLimit-*` headers forwarded |
+| Rate limit exceeded | `429 Too Many Requests` with Keycloak's `Retry-After` and `X-RateLimit-*` headers forwarded |
 
 ## Caching
 

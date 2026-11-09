@@ -38,7 +38,7 @@ Not everything can run a browser login. CLI tools, CI jobs, cron scripts, IoT de
     Only SHA-256 hashes are stored. Keys are shown once, can expire, and can be revoked instantly.
   </Card>
   <Card title="Rate limited" icon="clock">
-    Per-minute, hour and day limits per client or realm. Callers get a `429` with `X-RateLimit-*` headers.
+    Per-minute, hour and day limits per client or realm. Callers get a `429` with `Retry-After` and `X-RateLimit-*` headers.
   </Card>
   <Card title="Audited" icon="document">
     Key creation, use and revocation emit Keycloak events, so they show up wherever your events already go.

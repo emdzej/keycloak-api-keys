@@ -257,12 +257,18 @@ TOKEN=$(curl -s -X POST http://localhost:8080/realms/master/protocol/openid-conn
   -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" \
   | jq -r .access_token)
 
-# Create an API key
-curl -s -X POST http://localhost:8080/realms/master/api-keys \
+# Create an API key for the admin user (Admin API)
+USER_ID=$(curl -s "http://localhost:8080/admin/realms/master/users?username=admin&exact=true" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+curl -s -X POST "http://localhost:8080/admin/realms/master/api-keys/users/$USER_ID/api-keys" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "my-demo-key", "clientId": "admin-cli"}'
 ```
+
+> The self-service endpoint (`POST /realms/{realm}/api-keys`) requires a token with the `account`
+> audience, such as one issued to the Account Console. A plain `admin-cli` password-grant token is
+> rejected with `403 Token missing required audience: account`.
 
 Save the returned `key` value — you'll use it as the `X-API-Key` header.
 

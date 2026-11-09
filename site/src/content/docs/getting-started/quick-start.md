@@ -21,20 +21,27 @@ Keycloak comes up at `http://localhost:8080` (`admin` / `admin`) with the provid
 
 Set the realm's account theme to `api-keys` (see [Installation](/keycloak-api-keys/getting-started/installation/#enable-the-account-console-ui)). Then open `http://localhost:8080/realms/master/account`, go to **API Keys**, and create a key for a client.
 
-### With the REST API
+### With the Admin API
 
-Users create keys for themselves at `/realms/{realm}/api-keys`, authenticated with their own access token:
+An admin can create a key on behalf of any user:
 
 ```bash
 TOKEN=$(curl -s http://localhost:8080/realms/master/protocol/openid-connect/token \
   -d grant_type=password -d client_id=admin-cli \
   -d username=admin -d password=admin | jq -r .access_token)
 
-curl -s -X POST http://localhost:8080/realms/master/api-keys \
+USER_ID=$(curl -s "http://localhost:8080/admin/realms/master/users?username=admin&exact=true" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+
+curl -s -X POST "http://localhost:8080/admin/realms/master/api-keys/users/$USER_ID/api-keys" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "my-first-key", "clientId": "admin-cli"}'
 ```
+
+:::note
+Users can also create their own keys at `POST /realms/{realm}/api-keys`. That endpoint only accepts tokens issued for the Account Console, meaning the token must have the `account` audience. A plain `admin-cli` password-grant token is rejected with `403 Token missing required audience: account`.
+:::
 
 ```json
 {
@@ -43,7 +50,7 @@ curl -s -X POST http://localhost:8080/realms/master/api-keys \
   "name": "my-first-key",
   "clientId": "admin-cli",
   "keyPrefix": "admincli_",
-  "createdAt": "2026-11-09T10:30:00Z",
+  "createdAt": 1794238543.512000000,
   "expiresAt": null
 }
 ```

@@ -81,10 +81,10 @@ Returned when listing a user's own keys.
 | `id` | `string` (UUID) | Internal key ID |
 | `name` | `string` | Human-readable label |
 | `clientId` | `string` | The OAuth2 client this key is bound to |
-| `keyPrefix` | `string` | First characters of the key for identification |
-| `createdAt` | `string` (ISO 8601) | Creation timestamp |
-| `expiresAt` | `string` (ISO 8601) \| `null` | Expiry, null = never expires |
-| `lastUsedAt` | `string` (ISO 8601) \| `null` | Last successful token exchange |
+| `keyPrefix` | `string` | Sanitised client ID plus `_`, e.g. `myapp_` |
+| `createdAt` | `number` (epoch seconds) | Creation timestamp |
+| `expiresAt` | `number` (epoch seconds) \| `null` | Expiry, null = never expires |
+| `lastUsedAt` | `number` (epoch seconds) \| `null` | Last successful token exchange |
 | `usageCount` | `number` | Total number of token exchanges |
 
 ### `ApiKeyCreatedResponse`
@@ -98,8 +98,8 @@ Returned only on key creation. Contains the plain key — **store it immediately
 | `name` | `string` | |
 | `clientId` | `string` | |
 | `keyPrefix` | `string` | |
-| `createdAt` | `string` (ISO 8601) | |
-| `expiresAt` | `string` (ISO 8601) \| `null` | |
+| `createdAt` | `number` (epoch seconds) | |
+| `expiresAt` | `number` (epoch seconds) \| `null` | |
 | `lastUsedAt` | `null` | Always null on creation |
 | `usageCount` | `0` | Always 0 on creation |
 
@@ -114,10 +114,10 @@ Returned when listing keys via the admin API. Includes the owner's `userId` and 
 | `userId` | `string` (UUID) | Key owner |
 | `clientId` | `string` | |
 | `keyPrefix` | `string` | |
-| `createdAt` | `string` (ISO 8601) | |
-| `expiresAt` | `string` (ISO 8601) \| `null` | |
-| `lastUsedAt` | `string` (ISO 8601) \| `null` | |
-| `revokedAt` | `string` (ISO 8601) \| `null` | Non-null = revoked |
+| `createdAt` | `number` (epoch seconds) | |
+| `expiresAt` | `number` (epoch seconds) \| `null` | |
+| `lastUsedAt` | `number` (epoch seconds) \| `null` | |
+| `revokedAt` | `number` (epoch seconds) \| `null` | Non-null = revoked |
 | `usageCount` | `number` | |
 
 ### `ApiKeyCreateRequest`
@@ -130,7 +130,7 @@ Request body for creating a key (user or admin endpoint).
 | `clientId` | `string` | Yes | Must be a valid, enabled client in the realm |
 | `roles` | `string[]` | No | Subset of the owner user's roles; max 20 entries, each ≤ 100 chars; empty = no roles in token |
 | `scopes` | `string[]` | No | Subset of the client's scopes; max 20 entries, each ≤ 100 chars; empty = default scopes only |
-| `expiresAt` | `string` (ISO 8601) | No | Must be in the future and within the realm's maximum TTL (default 1 year). Omit for a non-expiring key. |
+| `expiresAt` | `string` (ISO 8601) | No | Must be in the future and within the realm's maximum TTL (default 1 year). If omitted, the key never expires, unless the realm sets `apiKeysMaxTtlSeconds` explicitly, in which case it gets that lifetime. |
 
 ---
 
@@ -156,10 +156,10 @@ Accept: application/json
     "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "name": "CI Pipeline",
     "clientId": "my-app",
-    "keyPrefix": "myapp_a1b2",
-    "createdAt": "2026-01-15T08:00:00Z",
-    "expiresAt": "2027-01-15T08:00:00Z",
-    "lastUsedAt": "2026-03-17T10:30:00Z",
+    "keyPrefix": "myapp_",
+    "createdAt": 1768464000.000000000,
+    "expiresAt": 1800000000.000000000,
+    "lastUsedAt": 1773743400.000000000,
     "usageCount": 42
   }
 ]
@@ -198,9 +198,9 @@ Accept: application/json
   "key": "myapp_EMrTFCBhQII1AmBEuE7WEQBm9WMe3OhRzIgRNd9rN802yaTucdcnKdu5SfGimmJc",
   "name": "CI Pipeline",
   "clientId": "my-app",
-  "keyPrefix": "myapp_EMrT",
-  "createdAt": "2026-03-18T10:00:00Z",
-  "expiresAt": "2027-01-15T08:00:00Z",
+  "keyPrefix": "myapp_",
+  "createdAt": 1773828000.000000000,
+  "expiresAt": 1800000000.000000000,
   "lastUsedAt": null,
   "usageCount": 0
 }
@@ -264,7 +264,7 @@ Accept: application/json
 |-----------|------|---------|-------------|
 | `userId` | `string` | — | Filter by owner user ID |
 | `clientId` | `string` | — | Filter by client ID |
-| `status` | `active` \| `revoked` | — | Filter by revocation status; omit for all |
+| `status` | `active` \| `revoked` \| `expired` | — | `active` = not revoked and not expired; `expired` = not revoked, past `expiresAt`; omit for all |
 | `first` | `number` | `0` | Pagination offset (number of results to skip) |
 | `max` | `number` | `25` | Maximum number of results to return |
 
@@ -277,10 +277,10 @@ Accept: application/json
     "name": "CI Pipeline",
     "userId": "e99f5394-1234-4abc-b678-9d0b1234abcd",
     "clientId": "my-app",
-    "keyPrefix": "myapp_a1b2",
-    "createdAt": "2026-01-15T08:00:00Z",
-    "expiresAt": "2027-01-15T08:00:00Z",
-    "lastUsedAt": "2026-03-17T10:30:00Z",
+    "keyPrefix": "myapp_",
+    "createdAt": 1768464000.000000000,
+    "expiresAt": 1800000000.000000000,
+    "lastUsedAt": 1773743400.000000000,
     "revokedAt": null,
     "usageCount": 42
   }
@@ -344,7 +344,7 @@ Accept: application/json
 ```json
 {
   "usageCount": 15432,
-  "lastUsedAt": "2026-03-18T10:00:00Z",
+  "lastUsedAt": 1773828000.000000000,
   "lastUsedIp": "203.0.113.42",
   "usageByDay": null
 }
