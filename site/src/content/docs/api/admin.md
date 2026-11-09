@@ -183,6 +183,27 @@ Authorization: Bearer {token}
 | `keysCount` | Total keys stored for the realm, including revoked and expired keys |
 | `cacheStatus` | `UP` if the rate limiter is healthy. `DOWN` if it is not, for example when the `api-keys-rate-limit` cache is unavailable and `apiKeysRateLimitFailClosed=true`. The in-memory fallback, used when fail-closed is off, also reports `UP`: it enforces limits, but per node only. See [SPI Configuration](/keycloak-api-keys/configuration/spi/#rate-limit-cache). |
 
+## kcctl extension
+
+```http
+GET /admin/realms/{realm}/api-keys/kcctl-extension
+```
+
+Returns a static kcctl extension manifest (`application/yaml`) describing the endpoints on this page. kcctl fetches it with `kcctl extension discover`, which also runs after `kcctl auth login`. The `api-key` commands then become available:
+
+```bash
+kcctl api-key list --user alice --status active
+kcctl api-key create alice --name ci --client my-app --role deployer --expires-at 2027-01-01T00:00:00Z
+kcctl api-key stats <id>
+kcctl api-key revoke <id>
+```
+
+`create` prints the plain key once, like the REST response. Requires `view-realm`.
+
+## OpenAPI
+
+The full REST surface, including the token exchange and the Account API, is described in [`docs/openapi.yaml`](https://github.com/emdzej/keycloak-api-keys/blob/main/docs/openapi.yaml) (OpenAPI 3.1).
+
 ## Errors
 
 Errors use Keycloak's standard error handling. These are the conditions and their messages:

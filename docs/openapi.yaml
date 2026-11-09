@@ -1,0 +1,607 @@
+openapi: 3.1.0
+info:
+  title: Keycloak API Keys
+  version: 0.2.0
+  summary: API key management and exchange for Keycloak.
+  description: |
+    REST endpoints added to Keycloak by the `keycloak-api-keys` provider.
+
+    - **Token exchange**: trade an API key for a regular Keycloak access token.
+    - **Account API**: users manage their own keys.
+    - **Admin API**: realm administrators manage keys for any user.
+
+    Timestamps in responses are epoch seconds with a fractional part (Jackson's default
+    `Instant` serialization). `expiresAt` in requests is an ISO 8601 string.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+  contact:
+    url: https://github.com/emdzej/keycloak-api-keys
+externalDocs:
+  description: Documentation
+  url: https://emdzej.github.io/keycloak-api-keys/
+
+servers:
+  - url: "{keycloakUrl}"
+    variables:
+      keycloakUrl:
+        default: http://localhost:8080
+        description: Keycloak base URL, without a trailing slash.
+
+tags:
+  - name: Token exchange
+    description: Exchange an API key for an access token.
+  - name: Account
+    description: Self-service key management for the authenticated user.
+  - name: Admin
+    description: Key management for realm administrators.
+
+paths:
+  /realms/{realm}/protocol/openid-connect/token:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+    post:
+      tags: [Token exchange]
+      operationId: exchangeApiKey
+      summary: Exchange an API key for an access token
+      description: |
+        Keycloak's standard token endpoint, using the custom
+        `urn:ietf:params:oauth:grant-type:api-key` grant. The client is authenticated as usual
+        (`client_secret` for confidential clients) and must be the client the key was issued for.
+
+        All rejections use the generic description `Invalid API key or unauthorized`. The specific
+        reason is recorded in the Keycloak event's `reason` detail. Every response carries the
+        `X-RateLimit-*` headers.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/ApiKeyGrantRequest"
+            example:
+              grant_type: urn:ietf:params:oauth:grant-type:api-key
+              api_key: myapp_Xk9fQ2mT7vLp3RwYb8NcZ1aHs5JdG4eKu6iOy0tBqVxW2nMr7FgEj3hPl9Cz
+              client_id: my-app
+              client_secret: s3cr3t
+      responses:
+        "200":
+          description: Access token for the key's owner, narrowed to the key's roles and scopes.
+          headers:
+            X-RateLimit-Limit: { $ref: "#/components/headers/X-RateLimit-Limit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/X-RateLimit-Remaining" }
+            X-RateLimit-Reset: { $ref: "#/components/headers/X-RateLimit-Reset" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Unknown, revoked or expired key, missing `api_key`, or the owner is disabled or deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OAuthError" }
+              example:
+                error: invalid_grant
+                error_description: Invalid API key or unauthorized
+        "401":
+          description: Client authentication failed, or the key was issued for a different client.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OAuthError" }
+              example:
+                error: invalid_client
+                error_description: Invalid API key or unauthorized
+        "429":
+          description: Rate limit exceeded for this key.
+          headers:
+            Retry-After: { $ref: "#/components/headers/Retry-After" }
+            X-RateLimit-Limit: { $ref: "#/components/headers/X-RateLimit-Limit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/X-RateLimit-Remaining" }
+            X-RateLimit-Reset: { $ref: "#/components/headers/X-RateLimit-Reset" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RateLimitError" }
+        "503":
+          description: The rate limiter is unavailable and the realm sets `apiKeysRateLimitFailClosed=true`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OAuthError" }
+              example:
+                error: service_unavailable
+                error_description: Rate limiter unavailable — try again later
+
+  /realms/{realm}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+    get:
+      tags: [Account]
+      operationId: listOwnApiKeys
+      summary: List the current user's keys
+      description: Revoked keys are excluded; expired keys are included.
+      security:
+        - accountBearer: []
+      responses:
+        "200":
+          description: The user's keys, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApiKey" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/MissingAccountAudience" }
+    post:
+      tags: [Account]
+      operationId: createOwnApiKey
+      summary: Create a key for the current user
+      description: |
+        Bearer token only (no cookie auth). The token must have the `account` audience, as
+        tokens issued to the Account Console do.
+      security:
+        - accountBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApiKeyCreateRequest" }
+      responses:
+        "201":
+          description: Key created. `key` is returned only in this response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Missing `account` audience, no role on the (non-public) client, or a requested role isn't assigned to the user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /realms/{realm}/api-keys/{keyId}:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+      - $ref: "#/components/parameters/KeyId"
+    delete:
+      tags: [Account]
+      operationId: revokeOwnApiKey
+      summary: Revoke one of the current user's keys
+      description: Idempotent. Revoking an already revoked key keeps the original `revokedAt`.
+      security:
+        - accountBearer: []
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Missing `account` audience, or the key belongs to another user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /realms/{realm}/api-keys/health:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+    get:
+      tags: [Account]
+      operationId: accountHealth
+      summary: Liveness check for the provider
+      security: []
+      responses:
+        "200":
+          description: The provider is loaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /admin/realms/{realm}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+    get:
+      tags: [Admin]
+      operationId: listApiKeys
+      summary: List keys in the realm
+      description: Requires `view-realm`.
+      security:
+        - adminBearer: []
+      parameters:
+        - name: userId
+          in: query
+          description: Only keys owned by this user ID.
+          schema: { type: string }
+        - name: clientId
+          in: query
+          description: Only keys bound to this client (`clientId`, not the internal UUID).
+          schema: { type: string }
+        - name: status
+          in: query
+          description: |
+            - `active`: not revoked and not expired
+            - `revoked`: revoked, regardless of expiry
+            - `expired`: not revoked, past `expiresAt`
+          schema:
+            type: string
+            enum: [active, revoked, expired]
+        - name: first
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: max
+          in: query
+          description: Page size. `0` or negative returns all matches.
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Matching keys, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminApiKey" }
+        "400":
+          description: Unsupported `status` value.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/realms/{realm}/api-keys/users/{userId}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+      - name: userId
+        in: path
+        required: true
+        description: ID of the user who will own the key.
+        schema: { type: string }
+    post:
+      tags: [Admin]
+      operationId: createApiKeyForUser
+      summary: Create a key for a user
+      description: Requires `manage-realm`. The same validation as self-service creation applies.
+      security:
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApiKeyCreateRequest" }
+      responses:
+        "201":
+          description: Key created. `key` is returned only in this response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: User or client not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/realms/{realm}/api-keys/{keyId}:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+      - $ref: "#/components/parameters/KeyId"
+    delete:
+      tags: [Admin]
+      operationId: revokeApiKey
+      summary: Revoke a key
+      description: Requires `manage-realm`. Idempotent; revoking an already revoked key keeps the original `revokedAt` and emits no second event.
+      security:
+        - adminBearer: []
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/realms/{realm}/api-keys/{keyId}/stats:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+      - $ref: "#/components/parameters/KeyId"
+    get:
+      tags: [Admin]
+      operationId: getApiKeyStats
+      summary: Usage statistics for a key
+      description: Requires `view-realm`.
+      security:
+        - adminBearer: []
+      responses:
+        "200":
+          description: Usage statistics.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyStats" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/realms/{realm}/api-keys/kcctl-extension:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+    get:
+      tags: [Admin]
+      operationId: getKcctlExtension
+      summary: kcctl extension manifest
+      description: |
+        Static `kcctl/v1` manifest describing these Admin API endpoints, so `kcctl api-key ...`
+        commands appear after `kcctl extension discover`. Requires `view-realm`.
+      security:
+        - adminBearer: []
+      responses:
+        "200":
+          description: The manifest.
+          content:
+            application/yaml:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/realms/{realm}/api-keys/health:
+    parameters:
+      - $ref: "#/components/parameters/Realm"
+    get:
+      tags: [Admin]
+      operationId: adminHealth
+      summary: Provider and rate limiter health
+      description: Requires `view-realm`.
+      security:
+        - adminBearer: []
+      responses:
+        "200":
+          description: Health summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    accountBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token of the user, with the `account` audience for POST and DELETE.
+    adminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin access token with `view-realm` (read) or `manage-realm` (write) on the realm.
+
+  parameters:
+    Realm:
+      name: realm
+      in: path
+      required: true
+      description: Realm name.
+      schema: { type: string }
+      example: my-realm
+    KeyId:
+      name: keyId
+      in: path
+      required: true
+      description: Key ID (UUID).
+      schema: { type: string, format: uuid }
+
+  headers:
+    Retry-After:
+      description: Seconds until the exhausted window resets.
+      schema: { type: integer, minimum: 1 }
+    X-RateLimit-Limit:
+      description: The key's per-minute limit.
+      schema: { type: integer }
+    X-RateLimit-Remaining:
+      description: Requests left in the tightest window.
+      schema: { type: integer }
+    X-RateLimit-Reset:
+      description: Epoch seconds when the caller can retry.
+      schema: { type: integer }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+    Forbidden:
+      description: The caller lacks the required realm role.
+    NotFound:
+      description: Key not found in this realm.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    MissingAccountAudience:
+      description: The token lacks the `account` audience.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: "Token missing required audience: account"
+    ValidationError:
+      description: |
+        Invalid request, for example: `name is required`, `clientId is required`, too many or too
+        long roles/scopes, `expiresAt must be in the future`, `expiresAt exceeds the maximum
+        allowed TTL of N days`, `Client is disabled`, or the 25 active keys per user and client
+        quota is exceeded.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Timestamp:
+      type: number
+      description: Epoch seconds with a fractional part.
+      example: 1794238543.512
+
+    ApiKeyGrantRequest:
+      type: object
+      required: [grant_type, api_key, client_id]
+      properties:
+        grant_type:
+          type: string
+          const: urn:ietf:params:oauth:grant-type:api-key
+        api_key:
+          type: string
+          description: The plain API key, `{prefix}_{64 alphanumeric characters}`.
+        client_id:
+          type: string
+          description: Must be the client the key was issued for.
+        client_secret:
+          type: string
+          description: Required for confidential clients.
+
+    TokenResponse:
+      type: object
+      description: Standard Keycloak token response.
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          description: JWT with the owner's claims plus `api_key_id`.
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer }
+        scope: { type: string }
+      additionalProperties: true
+
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        error_description: { type: string }
+
+    RateLimitError:
+      type: object
+      required: [error, error_description, retry_after]
+      properties:
+        error: { type: string, const: rate_limit_exceeded }
+        error_description: { type: string, example: API key rate limit exceeded }
+        retry_after:
+          type: integer
+          description: Same value as the `Retry-After` header.
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        error_description: { type: string }
+      additionalProperties: true
+
+    ApiKeyCreateRequest:
+      type: object
+      required: [name, clientId]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Label for the key.
+        clientId:
+          type: string
+          description: Client the key is bound to (`clientId`, not the internal UUID). The owner needs a role on it unless it's public.
+        roles:
+          type: array
+          description: |
+            Role names to grant. Each must be assigned to the owner, or the request fails with `403`.
+            A name is first looked up as a client role on `clientId`, then as a realm role.
+            The token only ever contains these roles: a key created without `roles` gets no roles.
+          items: { type: string }
+        scopes:
+          type: array
+          description: Optional client scopes to grant, which must be attached to the client. Omit to use the client's default scopes.
+          items: { type: string }
+        expiresAt:
+          type: string
+          format: date-time
+          description: |
+            Must be in the future and within the realm's `apiKeysMaxTtlSeconds` (default 365 days).
+            If omitted, the key never expires, unless the realm sets `apiKeysMaxTtlSeconds`
+            explicitly, in which case it gets that lifetime.
+      example:
+        name: CI pipeline
+        clientId: my-app
+        roles: [reports-reader]
+        expiresAt: "2027-01-15T08:00:00Z"
+
+    ApiKey:
+      type: object
+      required: [id, name, clientId, keyPrefix, createdAt, usageCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        clientId: { type: string }
+        keyPrefix:
+          type: string
+          description: Sanitised client ID plus `_`.
+          example: myapp_
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        lastUsedAt:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        usageCount: { type: integer, format: int64 }
+
+    ApiKeyCreated:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [key]
+          properties:
+            key:
+              type: string
+              description: The plain key. Only returned here; store it now.
+
+    AdminApiKey:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [userId]
+          properties:
+            userId: { type: string }
+            revokedAt:
+              description: Non-null means the key is revoked.
+              oneOf:
+                - $ref: "#/components/schemas/Timestamp"
+                - type: "null"
+
+    ApiKeyStats:
+      type: object
+      required: [usageCount]
+      properties:
+        usageCount: { type: integer, format: int64 }
+        lastUsedAt:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        lastUsedIp:
+          type: [string, "null"]
+        usageByDay:
+          description: Not implemented yet; always `null`.
+          type: [array, "null"]
+          items:
+            type: object
+            properties:
+              date: { type: string }
+              count: { type: integer, format: int64 }
+
+    AdminHealth:
+      type: object
+      required: [status, keysCount, cacheStatus]
+      properties:
+        status: { type: string, const: UP }
+        keysCount:
+          type: integer
+          format: int64
+          description: All keys in the realm, including revoked and expired.
+        cacheStatus:
+          type: string
+          enum: [UP, DOWN]
+          description: "`DOWN` only when the rate limiter is unhealthy (fail-closed mode with Infinispan unavailable)."

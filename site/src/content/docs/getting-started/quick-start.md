@@ -59,7 +59,7 @@ Users can also create their own keys at `POST /realms/{realm}/api-keys`. That en
 Copy the `key` now. Only its hash is stored, so it can't be shown again.
 :::
 
-The request body also accepts `roles`, `scopes` and `expiresAt` to narrow what the key can do. You can only grant roles you have yourself. The user needs a role on the client, unless the client is public.
+The request body also accepts `roles`, `scopes` and `expiresAt`. A key carries only the roles you list, so the key above has none. You can only grant roles you have yourself. The user needs a role on the client, unless the client is public.
 
 ## 3. Exchange it for a token
 

@@ -18,7 +18,7 @@ The usual workarounds are a service-account client with a shared secret, which u
 
 ## How it works
 
-1. A user creates a key for a specific client, either in the Account Console or through the REST API. They can limit it to a subset of their roles and the client's scopes, and give it an expiry date.
+1. A user creates a key for a specific client, either in the Account Console or through the REST API. They pick which of their own roles the key carries, since a key has no roles unless they're listed. They can also narrow it to some of the client's scopes and give it an expiry date.
 2. Keycloak stores only a hash of the key and returns the plain key once.
 3. The caller sends the key to your API, by default in the `X-API-Key` header.
 4. Your middleware exchanges the key at the realm's token endpoint using a custom grant:
