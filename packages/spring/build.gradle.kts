@@ -15,6 +15,7 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-test:$springBootVersion")
     testImplementation("org.springframework.security:spring-security-test:7.1.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
@@ -53,4 +54,8 @@ mavenPublishing {
             developerConnection.set("scm:git:ssh://git@github.com/emdzej/keycloak-api-keys.git")
         }
     }
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

@@ -18,6 +18,7 @@ package pl.emdzej.keycloak.apikeys.spring;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.MediaType;
@@ -50,6 +51,9 @@ public class ApiKeyTokenExchangeClient {
         Map response;
         try {
             response = restTemplate.postForObject(uri, new org.springframework.http.HttpEntity<>(form, headers()), Map.class);
+        } catch (org.springframework.web.client.HttpStatusCodeException ex) {
+            throw new TokenExchangeException("Token exchange failed: " + ex.getStatusCode().value(), ex,
+                ex.getStatusCode().value(), TokenExchangeException.rateLimitHeadersFrom(ex.getResponseHeaders()));
         } catch (RestClientException ex) {
             throw new TokenExchangeException("Token exchange failed", ex);
         }
@@ -84,12 +88,51 @@ public class ApiKeyTokenExchangeClient {
     public record TokenExchangeResponse(String accessToken, Duration expiresIn) {}
 
     public static class TokenExchangeException extends RuntimeException {
+        /** Headers copied from Keycloak's 429 response so callers can honour them. */
+        public static final List<String> RATE_LIMIT_HEADERS = List.of(
+            "Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset");
+
+        private final int status;
+        private final Map<String, String> rateLimitHeaders;
+
         public TokenExchangeException(String message) {
-            super(message);
+            this(message, null, 0, Map.of());
         }
 
         public TokenExchangeException(String message, Throwable cause) {
+            this(message, cause, 0, Map.of());
+        }
+
+        public TokenExchangeException(String message, Throwable cause, int status, Map<String, String> rateLimitHeaders) {
             super(message, cause);
+            this.status = status;
+            this.rateLimitHeaders = rateLimitHeaders;
+        }
+
+        static Map<String, String> rateLimitHeadersFrom(org.springframework.http.HttpHeaders headers) {
+            Map<String, String> result = new java.util.LinkedHashMap<>();
+            if (headers != null) {
+                for (String name : RATE_LIMIT_HEADERS) {
+                    String value = headers.getFirst(name);
+                    if (value != null) {
+                        result.put(name, value);
+                    }
+                }
+            }
+            return result;
+        }
+
+        /** HTTP status Keycloak answered with, or {@code 0} if there was no HTTP response. */
+        public int status() {
+            return status;
+        }
+
+        public boolean isRateLimited() {
+            return status == 429;
+        }
+
+        public Map<String, String> rateLimitHeaders() {
+            return rateLimitHeaders;
         }
     }
 }

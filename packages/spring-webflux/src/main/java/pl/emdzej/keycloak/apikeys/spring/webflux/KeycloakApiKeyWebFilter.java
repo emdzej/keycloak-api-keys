@@ -86,7 +86,9 @@ public class KeycloakApiKeyWebFilter implements WebFilter, Ordered {
                         chain.filter(exchange)
                                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication)))
                 .onErrorResume(ReactiveApiKeyTokenExchangeClient.TokenExchangeException.class,
-                        ex -> unauthorized(exchange, "invalid_api_key", ex.getMessage()))
+                        ex -> ex.isRateLimited()
+                                ? rateLimited(exchange, ex.rateLimitHeaders())
+                                : unauthorized(exchange, "invalid_api_key", ex.getMessage()))
                 .onErrorResume(IllegalArgumentException.class,
                         ex -> unauthorized(exchange, "invalid_token", "Unable to parse token"));
     }
@@ -167,20 +169,38 @@ public class KeycloakApiKeyWebFilter implements WebFilter, Ordered {
         return fallback != null ? Instant.now().plus(fallback) : null;
     }
 
-    private Collection<? extends GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
-        Object roles = claims.get("roles");
-        if (roles instanceof Collection<?> collection) {
-            return collection.stream()
-                    .map(String::valueOf)
+    /**
+     * Realm roles from {@code realm_access.roles} (the standard Keycloak claim), plus a
+     * top-level {@code roles} claim if a custom mapper adds one, as {@code ROLE_<name>}.
+     */
+    static Collection<? extends GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
+        java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+        if (claims.get("realm_access") instanceof Map<?, ?> realmAccess) {
+            addRoles(roles, realmAccess.get("roles"));
+        }
+        addRoles(roles, claims.get("roles"));
+        return roles.stream()
                     .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
                     .map(SimpleGrantedAuthority::new)
-                    .collect(Collectors.toSet());
+                    .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private static void addRoles(java.util.Set<String> target, Object roles) {
+        if (roles instanceof Collection<?> collection) {
+            collection.forEach(role -> target.add(String.valueOf(role)));
+        } else if (roles instanceof String role) {
+            target.add(role);
         }
-        if (roles instanceof String roleString) {
-            return List.of(new SimpleGrantedAuthority(
-                    roleString.startsWith("ROLE_") ? roleString : "ROLE_" + roleString));
-        }
-        return Collections.emptyList();
+    }
+
+    private Mono<Void> rateLimited(ServerWebExchange exchange, Map<String, String> headers) {
+        exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+        headers.forEach(exchange.getResponse().getHeaders()::set);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        byte[] bytes = "{\"error\":\"rate_limit_exceeded\",\"error_description\":\"API key rate limit exceeded\"}"
+                .getBytes(StandardCharsets.UTF_8);
+        return exchange.getResponse().writeWith(
+                Mono.just(exchange.getResponse().bufferFactory().wrap(bytes)));
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String error, String description) {

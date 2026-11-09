@@ -86,6 +86,10 @@ public class KeycloakApiKeyFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(authentication);
             filterChain.doFilter(request, response);
         } catch (ApiKeyTokenExchangeClient.TokenExchangeException ex) {
+            if (ex.isRateLimited()) {
+                rateLimited(response, ex.rateLimitHeaders());
+                return;
+            }
             unauthorized(response, "invalid_api_key", ex.getMessage());
         } catch (Exception ex) {
             unauthorized(response, "invalid_token", "Unable to parse token");
@@ -158,19 +162,35 @@ public class KeycloakApiKeyFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private Collection<? extends GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
-        Object roles = claims.get("roles");
+    /**
+     * Realm roles from {@code realm_access.roles} (the standard Keycloak claim), plus a
+     * top-level {@code roles} claim if a custom mapper adds one, as {@code ROLE_<name>}.
+     */
+    static Collection<? extends GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
+        java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+        if (claims.get("realm_access") instanceof Map<?, ?> realmAccess) {
+            addRoles(roles, realmAccess.get("roles"));
+        }
+        addRoles(roles, claims.get("roles"));
+        return roles.stream()
+            .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+            .map(SimpleGrantedAuthority::new)
+            .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private static void addRoles(java.util.Set<String> target, Object roles) {
         if (roles instanceof Collection<?> collection) {
-            return collection.stream()
-                .map(String::valueOf)
-                .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toSet());
+            collection.forEach(role -> target.add(String.valueOf(role)));
+        } else if (roles instanceof String role) {
+            target.add(role);
         }
-        if (roles instanceof String roleString) {
-            return List.of(new SimpleGrantedAuthority(roleString.startsWith("ROLE_") ? roleString : "ROLE_" + roleString));
-        }
-        return Collections.emptyList();
+    }
+
+    private void rateLimited(HttpServletResponse response, Map<String, String> headers) throws IOException {
+        response.setStatus(429);
+        headers.forEach(response::setHeader);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\":\"rate_limit_exceeded\",\"error_description\":\"API key rate limit exceeded\"}");
     }
 
     private void unauthorized(HttpServletResponse response, String error, String description) throws IOException {
