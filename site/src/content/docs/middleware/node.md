@@ -1,195 +1,141 @@
 ---
-title: Node.js / Express
-description: Integrate Keycloak API Keys with Node.js and Express applications.
+title: Node.js
+description: Protect Express, Fastify and Hono APIs with Keycloak API keys.
 ---
 
-# Node.js / Express
+Three packages, one behaviour. Each reads the key from a request header, exchanges it at Keycloak's token endpoint, caches the result, and attaches the decoded JWT claims to the request.
 
-The Node.js package provides middleware for Express and compatible frameworks.
+| Package | Framework |
+|---------|-----------|
+| `@emdzej/keycloak-api-keys-express` | Express 4 / 5 |
+| `@emdzej/keycloak-api-keys-fastify` | Fastify 5 |
+| `@emdzej/keycloak-api-keys-hono` | Hono 4 (Node, Bun, Deno, Cloudflare Workers) |
 
-## Installation
+## Express
 
 ```bash
-npm install @emdzej/keycloak-api-keys-node
-# or
-pnpm add @emdzej/keycloak-api-keys-node
+pnpm add @emdzej/keycloak-api-keys-express express
 ```
 
-## Basic Usage
-
-```typescript
+```ts
 import express from 'express';
-import { apiKeyAuth } from '@emdzej/keycloak-api-keys-node';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-express';
 
 const app = express();
 
-app.use(apiKeyAuth({
-  keycloakUrl: 'https://auth.example.com',
+app.use('/api', keycloakApiKey({
+  serverUrl: 'https://auth.example.com',
   realm: 'my-realm',
-  clientId: 'my-api',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+  clientId: 'my-app',
+  clientSecret: process.env.CLIENT_SECRET,
 }));
 
-app.get('/api/data', (req, res) => {
-  // req.apiKey is available after authentication
-  console.log('Key ID:', req.apiKey.id);
-  console.log('Key Name:', req.apiKey.name);
-  console.log('Client:', req.apiKey.clientId);
-  console.log('Scopes:', req.apiKey.scopes);
-  
-  res.json({ message: 'Authenticated!' });
-});
-
-app.listen(3000);
-```
-
-## Configuration Options
-
-```typescript
-interface ApiKeyAuthOptions {
-  // Required
-  keycloakUrl: string;      // Keycloak base URL
-  realm: string;            // Realm name
-  clientId: string;         // Client ID for introspection
-  clientSecret: string;     // Client secret
-  
-  // Optional
-  headerName?: string;      // Default: 'X-API-Key'
-  cacheTtl?: number;        // Cache TTL in ms (default: 60000)
-  onError?: ErrorHandler;   // Custom error handler
-}
-```
-
-## Selective Protection
-
-Protect only specific routes:
-
-```typescript
-import { apiKeyAuth, requireApiKey } from '@emdzej/keycloak-api-keys-node';
-
-const app = express();
-
-// Configure middleware (doesn't protect anything yet)
-const auth = apiKeyAuth({
-  keycloakUrl: 'https://auth.example.com',
-  realm: 'my-realm',
-  clientId: 'my-api',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
-});
-
-// Public route
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-
-// Protected routes
-app.use('/api', auth, requireApiKey());
-
-app.get('/api/data', (req, res) => {
-  res.json({ data: 'protected' });
+app.get('/api/profile', (req, res) => {
+  res.json({
+    userId: req.auth?.sub,
+    roles: req.auth?.realm_access?.roles,
+  });
 });
 ```
 
-## Scope Validation
+Mount the middleware on the paths you want to protect. Anything outside them stays public.
 
-```typescript
-import { apiKeyAuth, requireScopes } from '@emdzej/keycloak-api-keys-node';
+## Fastify
 
-app.use('/api', apiKeyAuth({ /* ... */ }));
-
-// Require specific scopes
-app.get('/api/read', requireScopes('read'), (req, res) => {
-  res.json({ data: 'read-only data' });
-});
-
-app.post('/api/write', requireScopes('write'), (req, res) => {
-  res.json({ message: 'written' });
-});
-
-// Require multiple scopes
-app.delete('/api/admin', requireScopes('admin', 'write'), (req, res) => {
-  res.json({ message: 'admin action' });
-});
+```bash
+pnpm add @emdzej/keycloak-api-keys-fastify fastify
 ```
 
-## Custom Error Handling
-
-```typescript
-app.use(apiKeyAuth({
-  keycloakUrl: 'https://auth.example.com',
-  realm: 'my-realm',
-  clientId: 'my-api',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
-  onError: (err, req, res) => {
-    if (err.code === 'INVALID_KEY') {
-      return res.status(401).json({ 
-        error: 'Invalid API key',
-        hint: 'Check that your key is correct and not revoked'
-      });
-    }
-    if (err.code === 'MISSING_KEY') {
-      return res.status(401).json({ 
-        error: 'API key required',
-        hint: 'Include X-API-Key header'
-      });
-    }
-    // Default handling
-    res.status(500).json({ error: 'Internal error' });
-  }
-}));
-```
-
-## TypeScript Types
-
-```typescript
-// Extend Express Request type
-declare global {
-  namespace Express {
-    interface Request {
-      apiKey?: {
-        id: string;
-        name: string;
-        clientId: string;
-        scopes: string[];
-        active: boolean;
-      };
-    }
-  }
-}
-```
-
-## With Fastify
-
-```typescript
+```ts
 import Fastify from 'fastify';
-import { fastifyApiKeyAuth } from '@emdzej/keycloak-api-keys-node/fastify';
+import { keycloakApiKeyPlugin } from '@emdzej/keycloak-api-keys-fastify';
 
-const app = Fastify();
+const fastify = Fastify();
 
-app.register(fastifyApiKeyAuth, {
-  keycloakUrl: 'https://auth.example.com',
+await fastify.register(keycloakApiKeyPlugin, {
+  serverUrl: 'https://auth.example.com',
   realm: 'my-realm',
-  clientId: 'my-api',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+  clientId: 'my-app',
+  clientSecret: process.env.CLIENT_SECRET,
+  prefix: '/api', // routes under this prefix require a key (default: /api)
 });
 
-app.get('/api/data', async (request, reply) => {
-  return { keyId: request.apiKey.id };
+fastify.get('/api/profile', async (request) => ({
+  userId: request.auth?.sub,
+  roles: request.auth?.realm_access?.roles,
+}));
+```
+
+## Hono
+
+```bash
+pnpm add @emdzej/keycloak-api-keys-hono hono
+```
+
+```ts
+import { Hono } from 'hono';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-hono';
+
+const app = new Hono();
+
+app.use('/api/*', keycloakApiKey({
+  serverUrl: 'https://auth.example.com',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  clientSecret: process.env.CLIENT_SECRET,
+}));
+
+app.get('/api/profile', (c) => {
+  const auth = c.get('auth');
+  return c.json({ userId: auth.sub });
 });
 ```
+
+The Hono package only uses `fetch`, so it runs anywhere Hono does. Read the secret from whatever your runtime provides: `Bun.env`, `Deno.env.get()`, or the Workers `env` binding.
+
+## Options
+
+All three packages accept the same options.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `serverUrl` | `string` | required | Keycloak base URL |
+| `realm` | `string` | required | Realm name |
+| `clientId` | `string` | required | Client the keys were issued for |
+| `clientSecret` | `string` | — | Required for confidential clients, omit for public ones |
+| `headerName` | `string` | `X-API-Key` | Header to read the key from |
+| `cacheTtl` | `number` | `300` | Max seconds to cache a successful exchange |
+| `prefix` | `string` | `/api` | Fastify only: route prefix to protect |
+
+:::note
+A key is bound to one client. `clientId` must match the client the key was created for, or the exchange fails with `401`.
+:::
+
+## Request auth info
+
+Each package adds an `auth` property (on `req`, `request`, or the Hono context) with the decoded access token:
+
+```ts
+interface AuthInfo {
+  sub: string;                          // key owner's user ID
+  azp: string;                          // client the key is bound to
+  api_key_id: string;                   // ID of the key used
+  realm_access?: { roles: string[] };   // roles granted to the key
+  scope?: string;
+  [claim: string]: unknown;             // any other claims your mappers add
+}
+```
+
+The TypeScript module augmentation is included, so `req.auth` is typed without extra setup.
+
+## Responses
+
+| Situation | Response |
+|-----------|----------|
+| No key in the header | `401 Unauthorized` |
+| Unknown, revoked or expired key, or wrong client | `401 Unauthorized` |
+| Rate limit exceeded | `429 Too Many Requests` with Keycloak's `X-RateLimit-*` headers forwarded |
 
 ## Caching
 
-By default, introspection results are cached for 60 seconds:
-
-```typescript
-app.use(apiKeyAuth({
-  // ...
-  cacheTtl: 300000, // 5 minutes
-}));
-```
-
-Set to `0` to disable caching (not recommended for production).
-
-## Next Steps
-
-- [Java Middleware](/keycloak-api-keys/middleware/java/) — Spring Boot integration
-- [.NET Middleware](/keycloak-api-keys/middleware/dotnet/) — ASP.NET Core integration
+Successful exchanges are cached in memory per process, keyed by API key. An entry lives for `cacheTtl` seconds or until the access token expires, whichever comes first. A revoked key can therefore keep working for up to `cacheTtl` seconds on an instance that has it cached. Lower `cacheTtl` if you need faster revocation.

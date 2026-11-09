@@ -1,97 +1,88 @@
 ---
 title: Installation
-description: How to install the Keycloak API Keys SPI extension.
+description: Add the Keycloak API Keys provider to your Keycloak server.
 ---
 
-# Installation
+The extension is a single provider JAR. It contains the grant type, the REST endpoints, the database migration and the Account Console theme.
 
 ## Requirements
 
 - Keycloak 26.7 or later (tested with 26.8.2)
-- Java 21 or later (for building from source)
+- A relational database that Keycloak supports. The provider adds its own table through a Liquibase changelog when Keycloak starts.
+- Java 21 or later, only if you build from source
 
-## Version Compatibility
+## Option 1: Maven Central
 
-| SPI version | Keycloak | Notes |
-|-------------|----------|-------|
-| `0.2.x` | 26.7 and later (built against 26.8.2) | Recommended. Uses Keycloak APIs introduced in 26.7. |
-| `0.1.1` | 26.5 – 26.6.x | Use this on Keycloak older than 26.7. Also works on 26.6.4+. |
-| `0.1.0` | 26.5 – 26.6.3 | ⚠️ Fails on 26.6.4+ (token exchange returns HTTP 500). Upgrade to `0.1.1`. |
-
-The middleware packages (Spring, Express, Fastify, Hono, ASP.NET Core) talk to Keycloak only over HTTP
-(the standard token endpoint), so they are independent of the Keycloak version and work with any SPI version above.
-
-## Option 1: Download JAR
-
-Download the latest release from [GitHub Releases](https://github.com/emdzej/keycloak-api-keys/releases):
+The provider is published as `pl.emdzej.keycloak:keycloak-api-keys-spi`. Use the `-all` JAR:
 
 ```bash
-# Download the JAR
-curl -L -o keycloak-api-keys-spi.jar \
-  https://github.com/emdzej/keycloak-api-keys/releases/latest/download/keycloak-api-keys-spi.jar
+VERSION=0.2.0
+curl -L -o /opt/keycloak/providers/keycloak-api-keys-spi.jar \
+  "https://repo1.maven.org/maven2/pl/emdzej/keycloak/keycloak-api-keys-spi/$VERSION/keycloak-api-keys-spi-$VERSION-all.jar"
 
-# Copy to Keycloak providers directory
-cp keycloak-api-keys-spi.jar /opt/keycloak/providers/
-
-# Restart Keycloak
 /opt/keycloak/bin/kc.sh build
 /opt/keycloak/bin/kc.sh start
 ```
 
-## Option 2: Docker
+## Option 2: Container image
 
-Use the pre-built Docker image:
-
-```yaml
-# docker-compose.yml
-services:
-  keycloak:
-    image: ghcr.io/emdzej/keycloak-api-keys:latest
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-    ports:
-      - "8080:8080"
-    command: start-dev
-```
-
-Or extend the official Keycloak image:
+Extend the official image:
 
 ```dockerfile
-FROM quay.io/keycloak/keycloak:26.8.2
+FROM quay.io/keycloak/keycloak:26.8.2 AS builder
 
-COPY --from=ghcr.io/emdzej/keycloak-api-keys:latest \
-  /opt/keycloak/providers/keycloak-api-keys-spi.jar \
-  /opt/keycloak/providers/
+ARG VERSION=0.2.0
+ADD --chown=keycloak:keycloak \
+  https://repo1.maven.org/maven2/pl/emdzej/keycloak/keycloak-api-keys-spi/${VERSION}/keycloak-api-keys-spi-${VERSION}-all.jar \
+  /opt/keycloak/providers/keycloak-api-keys-spi.jar
 
 RUN /opt/keycloak/bin/kc.sh build
+
+FROM quay.io/keycloak/keycloak:26.8.2
+COPY --from=builder /opt/keycloak/ /opt/keycloak/
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
 ```
 
-## Option 3: Build from Source
+On Kubernetes with the Keycloak Operator, put the same image in `spec.image` of your `Keycloak` resource.
+
+## Option 3: Build from source
 
 ```bash
 git clone https://github.com/emdzej/keycloak-api-keys.git
 cd keycloak-api-keys
-
 ./gradlew :spi:shadowJar
-
-# Output: spi/build/libs/keycloak-api-keys-spi-*.jar
+# → spi/build/libs/keycloak-api-keys-spi-*-all.jar
 ```
 
-## Verify Installation
+For local development, `./scripts/dev.sh` builds the JAR and starts Keycloak and Postgres through Docker Compose at `http://localhost:8080` (`admin` / `admin`).
 
-After restarting Keycloak, verify the SPI is loaded:
+## Enable the Account Console UI
+
+The self-service UI ships as an account theme named `api-keys`. To turn it on for a realm:
+
+1. Open **Realm settings → Themes**.
+2. Set **Account theme** to `api-keys`.
+3. Save. Users now get an **API Keys** page in the Account Console.
+
+You can skip this if keys are only managed through the REST API.
+
+## Optional: key pepper
+
+Set the `API_KEY_PEPPER` environment variable on Keycloak to store keys as HMAC-SHA-256 instead of plain SHA-256. A leaked database dump is then useless without the pepper.
+
+:::caution
+You can add a pepper to an existing installation. Keys created before it still validate through a plain SHA-256 fallback. Changing or removing the pepper later invalidates every key created with it, so treat it like any other long-lived secret.
+:::
+
+## Verify
+
+The provider exposes health endpoints:
 
 ```bash
-/opt/keycloak/bin/kc.sh show-config | grep api-keys
+curl http://localhost:8080/realms/my-realm/api-keys/health
+# {"status":"ok"}
 ```
 
-Or check the Admin Console:
+## Next steps
 
-1. Go to **Realm Settings** → **Events** → **Config**
-2. Look for `api-key-*` event types in the available events
-
-## Next Steps
-
-- [Quick Start](/keycloak-api-keys/getting-started/quick-start/) — Create your first API key
-- [SPI Configuration](/keycloak-api-keys/configuration/spi/) — Configure the extension
+- [Quick Start](/keycloak-api-keys/getting-started/quick-start/): create your first key

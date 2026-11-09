@@ -1,11 +1,9 @@
 ---
 title: .NET / ASP.NET Core
-description: Integrate Keycloak API Keys with ASP.NET Core applications.
+description: Protect ASP.NET Core APIs with Keycloak API keys.
 ---
 
-# .NET / ASP.NET Core
-
-The NuGet package provides authentication handlers for ASP.NET Core.
+`EmDzej.KeycloakApiKeyAuthentication` is an ASP.NET Core authentication handler. It exchanges the API key at Keycloak's token endpoint and fills `HttpContext.User` with the resulting claims, so `[Authorize]`, roles and policies work as usual. It targets .NET 10.
 
 ## Installation
 
@@ -13,235 +11,108 @@ The NuGet package provides authentication handlers for ASP.NET Core.
 dotnet add package EmDzej.KeycloakApiKeyAuthentication
 ```
 
-## Basic Usage
+## Setup
 
 ```csharp
 // Program.cs
-var builder = WebApplication.CreateBuilder(args);
-
 builder.Services
-    .AddAuthentication()
-    .AddKeycloakApiKey(options =>
+    .AddAuthentication(KeycloakApiKeyExtensions.DefaultScheme)
+    .AddKeycloakApiKeyAuthentication(options =>
     {
-        options.KeycloakUrl = "https://auth.example.com";
-        options.Realm = "my-realm";
-        options.ClientId = "my-api";
-        options.ClientSecret = builder.Configuration["Keycloak:ClientSecret"];
+        options.ServerUrl    = "https://auth.example.com";
+        options.Realm        = "my-realm";
+        options.ClientId     = "my-app";
+        options.ClientSecret = builder.Configuration["Keycloak:ClientSecret"]; // omit for public clients
     });
 
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/api/data", (HttpContext context) =>
+app.MapGet("/api/profile", (ClaimsPrincipal user) => new
 {
-    var apiKey = context.GetApiKey();
-    return Results.Ok(new { keyId = apiKey?.Id });
-}).RequireAuthorization();
-
-app.Run();
+    UserId   = user.FindFirstValue(ClaimTypes.NameIdentifier),
+    ApiKeyId = user.FindFirstValue("api_key_id"),
+})
+.RequireAuthorization();
 ```
 
-## Configuration
-
-### appsettings.json
-
-```json
-{
-  "Keycloak": {
-    "Url": "https://auth.example.com",
-    "Realm": "my-realm",
-    "ClientId": "my-api",
-    "ClientSecret": "secret"
-  }
-}
+```http
+GET /api/profile HTTP/1.1
+X-API-Key: myapp_a1b2c3…
 ```
 
-### Options binding
+## Options
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `ServerUrl` | required | Keycloak base URL |
+| `Realm` | required | Realm name |
+| `ClientId` | required | Client the keys were issued for |
+| `ClientSecret` | `null` | Required for confidential clients |
+| `HeaderName` | `X-API-Key` | Header to read the key from |
+| `CacheTtlSeconds` | `300` | Max seconds to cache a successful exchange |
+
+## Claims
+
+| Claim | Source |
+|-------|--------|
+| `ClaimTypes.NameIdentifier`, `sub` | Key owner's user ID |
+| `ClaimTypes.Name`, `preferred_username` | Username |
+| `ClaimTypes.Email` | Email |
+| `ClaimTypes.Role` | Realm roles granted to the key |
+| `client_role` | Client roles, as `<clientId>:<role>` |
+| `azp` | Client the key is bound to |
+| `api_key_id` | ID of the key used |
+| `scope` | Granted scopes |
+
+Realm roles map to `ClaimTypes.Role`, so role checks work directly:
 
 ```csharp
-builder.Services
-    .AddAuthentication()
-    .AddKeycloakApiKey(
-        builder.Configuration.GetSection("Keycloak"));
-```
-
-## Configuration Options
-
-```csharp
-public class KeycloakApiKeyOptions
-{
-    public string KeycloakUrl { get; set; }
-    public string Realm { get; set; }
-    public string ClientId { get; set; }
-    public string ClientSecret { get; set; }
-    
-    // Optional
-    public string HeaderName { get; set; } = "X-API-Key";
-    public TimeSpan CacheDuration { get; set; } = TimeSpan.FromMinutes(1);
-}
-```
-
-## Accessing API Key Info
-
-```csharp
-app.MapGet("/api/data", (HttpContext context) =>
-{
-    var apiKey = context.GetApiKey();
-    
-    if (apiKey is null)
-        return Results.Unauthorized();
-    
-    return Results.Ok(new
-    {
-        KeyId = apiKey.Id,
-        KeyName = apiKey.Name,
-        ClientId = apiKey.ClientId,
-        Scopes = apiKey.Scopes
-    });
-}).RequireAuthorization();
-```
-
-## Policy-Based Authorization
-
-```csharp
-// Configure policies
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("ReadAccess", policy =>
-        policy.RequireClaim("scope", "read"));
-    
-    options.AddPolicy("WriteAccess", policy =>
-        policy.RequireClaim("scope", "write"));
-    
-    options.AddPolicy("AdminAccess", policy =>
-        policy.RequireClaim("scope", "admin"));
+    options.AddPolicy("ReportsReader", p => p.RequireRole("reports-reader"));
 });
 
-// Use policies
-app.MapGet("/api/read", () => Results.Ok())
-    .RequireAuthorization("ReadAccess");
-
-app.MapPost("/api/write", () => Results.Ok())
-    .RequireAuthorization("WriteAccess");
+app.MapGet("/api/reports", () => ...).RequireAuthorization("ReportsReader");
 ```
 
-## Controller-Based APIs
+## Responses
+
+| Situation | Response |
+|-----------|----------|
+| No key | No result. Other schemes can authenticate, otherwise the challenge returns `401` |
+| Unknown, revoked or expired key, or wrong client | `401` with `WWW-Authenticate: ApiKey realm="…"` |
+| Rate limit exceeded | `401`, with Keycloak's `X-RateLimit-*` headers forwarded |
+| Authenticated but fails a policy | `403` |
+
+## Custom cache
+
+The default cache is in memory. To share it across instances, register your own `ITokenCache<ApiKeyClaimsInfo>` before adding the scheme:
 
 ```csharp
-[ApiController]
-[Route("api/[controller]")]
-[Authorize(AuthenticationSchemes = KeycloakApiKeyDefaults.AuthenticationScheme)]
-public class DataController : ControllerBase
-{
-    [HttpGet]
-    public IActionResult Get()
-    {
-        var apiKey = HttpContext.GetApiKey();
-        return Ok(new { keyId = apiKey?.Id });
-    }
-    
-    [HttpPost]
-    [Authorize(Policy = "WriteAccess")]
-    public IActionResult Post([FromBody] DataDto data)
-    {
-        return Created();
-    }
-}
+builder.Services.AddSingleton<ITokenCache<ApiKeyClaimsInfo>, MyRedisTokenCache>();
 ```
 
-## Mixed Authentication
+## Resilience
 
-Support both API keys and JWT:
+The exchange uses a named `HttpClient`, so you can attach retries or a circuit breaker:
+
+```csharp
+builder.Services
+    .AddHttpClient(KeycloakTokenExchangeClient.HttpClientName)
+    .AddStandardResilienceHandler(); // Microsoft.Extensions.Http.Resilience
+```
+
+## Multiple realms
+
+Register one scheme per realm:
 
 ```csharp
 builder.Services
     .AddAuthentication()
-    .AddKeycloakApiKey(options => { /* ... */ })
-    .AddJwtBearer(options => { /* ... */ });
-
-builder.Services.AddAuthorization(options =>
-{
-    options.DefaultPolicy = new AuthorizationPolicyBuilder()
-        .AddAuthenticationSchemes(
-            KeycloakApiKeyDefaults.AuthenticationScheme,
-            JwtBearerDefaults.AuthenticationScheme)
-        .RequireAuthenticatedUser()
-        .Build();
-});
+    .AddKeycloakApiKeyAuthentication("realm-a", o => { o.Realm = "a"; /* ... */ })
+    .AddKeycloakApiKeyAuthentication("realm-b", o => { o.Realm = "b"; /* ... */ });
 ```
-
-## Custom Error Responses
-
-```csharp
-builder.Services
-    .AddAuthentication()
-    .AddKeycloakApiKey(options =>
-    {
-        // ...
-        options.Events = new KeycloakApiKeyEvents
-        {
-            OnAuthenticationFailed = context =>
-            {
-                context.Response.StatusCode = 401;
-                context.Response.ContentType = "application/json";
-                return context.Response.WriteAsJsonAsync(new
-                {
-                    error = "Invalid API key",
-                    hint = "Verify your key is correct and active"
-                });
-            }
-        };
-    });
-```
-
-## Minimal API with Filters
-
-```csharp
-app.MapGet("/api/data", [Authorize] (HttpContext ctx) =>
-{
-    return Results.Ok(new { key = ctx.GetApiKey()?.Name });
-});
-```
-
-## Testing
-
-```csharp
-public class ApiTests : IClassFixture<WebApplicationFactory<Program>>
-{
-    private readonly HttpClient _client;
-    
-    public ApiTests(WebApplicationFactory<Program> factory)
-    {
-        _client = factory.CreateClient();
-    }
-    
-    [Fact]
-    public async Task Should_Authenticate_With_Valid_Key()
-    {
-        _client.DefaultRequestHeaders.Add("X-API-Key", "test_validkey");
-        
-        var response = await _client.GetAsync("/api/data");
-        
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-    
-    [Fact]
-    public async Task Should_Reject_Invalid_Key()
-    {
-        _client.DefaultRequestHeaders.Add("X-API-Key", "invalid");
-        
-        var response = await _client.GetAsync("/api/data");
-        
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-}
-```
-
-## Next Steps
-
-- [Java Middleware](/keycloak-api-keys/middleware/java/) — Spring Boot integration
-- [Node.js Middleware](/keycloak-api-keys/middleware/node/) — Express integration

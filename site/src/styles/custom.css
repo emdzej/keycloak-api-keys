@@ -1,24 +1,173 @@
+/*
+ * "Ink & amber" theme.
+ *
+ * Starlight >= 0.34 ships its styles inside `@layer starlight`, so anything here
+ * (unlayered) wins regardless of specificity. Every palette override therefore
+ * has to be scoped to a theme — a bare `:root` override leaks into light mode.
+ */
+
 :root {
-  --sl-color-accent-low: #1a3a47;
-  --sl-color-accent: #4A90A4;
-  --sl-color-accent-high: #8ec8db;
+  --kak-amber: #f5a524;
+  --kak-ink: #0b1020;
+  --sl-font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --sl-content-width: 48rem;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #3a2604;
+  --sl-color-accent: #f5a524;
+  --sl-color-accent-high: #ffd58a;
   --sl-color-white: #ffffff;
-  --sl-color-gray-1: #eceef2;
-  --sl-color-gray-2: #c0c2c7;
-  --sl-color-gray-3: #888b96;
-  --sl-color-gray-4: #545861;
-  --sl-color-gray-5: #353841;
-  --sl-color-gray-6: #24272f;
-  --sl-color-black: #17181c;
+  --sl-color-gray-1: #e8eaf2;
+  --sl-color-gray-2: #b9bdcc;
+  --sl-color-gray-3: #8389a0;
+  --sl-color-gray-4: #4c5268;
+  --sl-color-gray-5: #2a3046;
+  --sl-color-gray-6: #161b2e;
+  --sl-color-gray-7: #0f1424;
+  --sl-color-black: #0b1020;
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #c9e4ed;
-  --sl-color-accent: #2D5A6B;
-  --sl-color-accent-high: #1a3a47;
+  /* Darker amber so links and buttons keep AA contrast on white */
+  --sl-color-accent-low: #fdebc8;
+  --sl-color-accent: #a85a00;
+  --sl-color-accent-high: #5c3100;
 }
 
-/* Hero customization */
+/* ---------- Header ---------- */
+
+.site-title {
+  gap: 0.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.site-title img {
+  height: 1.4rem;
+  width: auto;
+}
+
+/* ---------- Splash hero ---------- */
+
+[data-has-hero] .main-frame {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, color-mix(in srgb, var(--sl-color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(var(--sl-color-gray-5) 1px, transparent 1px) 0 0 / 22px 22px;
+}
+
+:root[data-theme='light'] [data-has-hero] .main-frame {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, color-mix(in srgb, var(--sl-color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(var(--sl-color-gray-6) 1px, transparent 1px) 0 0 / 22px 22px;
+}
+
 .hero {
-  background: linear-gradient(135deg, var(--sl-color-accent-low) 0%, transparent 50%);
+  padding-block: clamp(2.5rem, 8vw, 6rem) clamp(2rem, 5vw, 4rem);
+}
+
+.hero h1 {
+  font-size: clamp(2.4rem, 5.5vw, 3.75rem);
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.hero .tagline {
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  color: var(--sl-color-gray-2);
+  max-width: 34rem;
+}
+
+.hero > img,
+.hero > .hero-html {
+  width: min(70%, 22rem);
+  filter: drop-shadow(0 18px 40px color-mix(in srgb, var(--sl-color-accent) 35%, transparent));
+}
+
+.hero .sl-link-button {
+  border-radius: 0.6rem;
+  font-weight: 600;
+  padding-inline: 1.25rem;
+}
+
+.hero .sl-link-button.primary {
+  background: var(--sl-color-accent);
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-black);
+}
+
+:root[data-theme='light'] .hero .sl-link-button.primary {
+  color: #fff;
+}
+
+.hero .sl-link-button.secondary {
+  border: 1px solid var(--sl-color-gray-4);
+  color: var(--sl-color-white);
+  background: transparent;
+}
+
+/* ---------- Landing sections ---------- */
+
+[data-has-hero] .sl-markdown-content h2 {
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+  letter-spacing: -0.02em;
+  margin-top: 3.5rem;
+}
+
+[data-has-hero] .sl-markdown-content h2 + p {
+  color: var(--sl-color-gray-2);
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  border-radius: 0.9rem;
+  border-color: var(--sl-color-gray-5);
+  background: color-mix(in srgb, var(--sl-color-gray-6) 70%, transparent);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--sl-color-accent) 55%, var(--sl-color-gray-5));
+  transform: translateY(-2px);
+}
+
+/* Starlight's stagger offsets every other card; looks broken with uneven text lengths */
+.card-grid.stagger {
+  --sl-card-stagger-offset: 0;
+}
+
+.card .icon {
+  --sl-card-border: var(--sl-color-accent);
+  --sl-card-bg: var(--sl-color-accent-low);
+  border-radius: 0.5rem;
+  color: var(--sl-color-accent-high);
+}
+
+/* Starlight inverts the gray scale in light mode: --sl-color-black is the page background */
+:root[data-theme='light'] .card {
+  background: var(--sl-color-black);
+  border-color: var(--sl-color-gray-5);
+  box-shadow: 0 1px 2px rgb(15 23 41 / 0.06);
+}
+
+:root[data-theme='light'] .card .icon {
+  color: var(--sl-color-accent);
+}
+
+/* ---------- Code ---------- */
+
+.expressive-code .frame {
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+.sl-markdown-content :not(pre) > code {
+  border-radius: 0.3rem;
+  padding: 0.1em 0.35em;
+}
+
+/* Long identifiers like the grant type URN must wrap on narrow screens */
+.sl-markdown-content :not(pre) > code {
+  overflow-wrap: anywhere;
 }

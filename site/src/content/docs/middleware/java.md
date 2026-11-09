@@ -1,28 +1,35 @@
 ---
-title: Java / Spring Boot
-description: Integrate Keycloak API Keys with Java and Spring Boot applications.
+title: Java / Spring
+description: Protect Spring MVC and Spring WebFlux APIs with Keycloak API keys.
 ---
 
-# Java / Spring Boot
+Two Spring Security integrations with the same configuration properties. Both auto-configure through Spring Boot, exchange the key at Keycloak's token endpoint, and put the decoded claims on the `SecurityContext`.
 
-The Spring Boot starter provides seamless integration with Spring Security.
+| Artifact | Stack |
+|----------|-------|
+| `pl.emdzej.keycloak:keycloak-api-keys-spring` | Spring MVC (servlet) |
+| `pl.emdzej.keycloak:keycloak-api-keys-spring-webflux` | Spring WebFlux (reactive, non-blocking `WebClient`) |
+
+Both are built against Spring Boot 4 and Spring Security 7.
 
 ## Installation
+
+### Gradle
+
+```kotlin
+implementation("pl.emdzej.keycloak:keycloak-api-keys-spring:0.2.0")
+// or
+implementation("pl.emdzej.keycloak:keycloak-api-keys-spring-webflux:0.2.0")
+```
 
 ### Maven
 
 ```xml
 <dependency>
   <groupId>pl.emdzej.keycloak</groupId>
-  <artifactId>keycloak-api-keys-spring-boot-starter</artifactId>
-  <version>0.1.0</version>
+  <artifactId>keycloak-api-keys-spring</artifactId>
+  <version>0.2.0</version>
 </dependency>
-```
-
-### Gradle
-
-```kotlin
-implementation("pl.emdzej.keycloak:keycloak-api-keys-spring-boot-starter:0.1.0")
 ```
 
 ## Configuration
@@ -31,156 +38,132 @@ implementation("pl.emdzej.keycloak:keycloak-api-keys-spring-boot-starter:0.1.0")
 # application.yml
 keycloak:
   api-keys:
-    keycloak-url: https://auth.example.com
+    server-url: https://auth.example.com
     realm: my-realm
-    client-id: my-api
-    client-secret: ${KEYCLOAK_CLIENT_SECRET}
-    
-    # Optional settings
-    header-name: X-API-Key  # default
-    cache-ttl: 60s          # cache introspection results
+    client-id: my-app
+    client-secret: ${CLIENT_SECRET}   # omit for public clients
+    header-name: X-API-Key            # optional
+    cache-ttl: PT5M                   # optional, ISO 8601 duration
 ```
 
-## Basic Usage
+| Property | Env variable | Default | Description |
+|----------|--------------|---------|-------------|
+| `keycloak.api-keys.server-url` | `KEYCLOAK_URL` | — | Keycloak base URL |
+| `keycloak.api-keys.realm` | `KEYCLOAK_REALM` | — | Realm name |
+| `keycloak.api-keys.client-id` | `CLIENT_ID` | — | Client the keys were issued for |
+| `keycloak.api-keys.client-secret` | `CLIENT_SECRET` | — | Omit for public clients |
+| `keycloak.api-keys.header-name` | `API_KEY_HEADER` | `X-API-Key` | Header to read the key from |
+| `keycloak.api-keys.cache-ttl` | `CACHE_TTL` | `PT5M` | Max time to cache a successful exchange |
 
-The starter auto-configures a `SecurityFilterChain` that validates API keys:
+The key is read from the configured header, or from `Authorization: ApiKey <key>`.
 
-```java
-@RestController
-@RequestMapping("/api")
-public class ApiController {
-    
-    @GetMapping("/data")
-    public ResponseEntity<Data> getData(ApiKeyAuthentication auth) {
-        // auth.getName() - key ID
-        // auth.getApiKeyName() - key name
-        // auth.getClientId() - owning client
-        // auth.getScopes() - granted scopes
-        
-        return ResponseEntity.ok(new Data());
-    }
-}
-```
+## Spring MVC
 
-## Custom Security Configuration
-
-If you need to customize the security configuration:
+Apply the auto-configured `KeycloakApiKeyConfigurer` to your filter chain:
 
 ```java
 @Configuration
-@EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(
-            HttpSecurity http,
-            ApiKeyAuthenticationFilter apiKeyFilter) throws Exception {
-        
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           KeycloakApiKeyConfigurer configurer) throws Exception {
+        configurer.configure(http);
         return http
-            .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class)
+            .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/public/**").permitAll()
-                .requestMatchers("/api/**").authenticated()
-            )
+                .requestMatchers("/health").permitAll()
+                .anyRequest().authenticated())
             .build();
     }
 }
 ```
 
-## Scope-Based Authorization
-
-```java
-@RestController
-@RequestMapping("/api")
-public class ApiController {
-    
-    @GetMapping("/read")
-    @PreAuthorize("hasAuthority('SCOPE_read')")
-    public Data read() {
-        return dataService.read();
-    }
-    
-    @PostMapping("/write")
-    @PreAuthorize("hasAuthority('SCOPE_write')")
-    public void write(@RequestBody Data data) {
-        dataService.write(data);
-    }
-}
-```
-
-## Mixed Authentication
-
-Support both API keys and JWT tokens:
+## Spring WebFlux
 
 ```java
 @Configuration
+@EnableReactiveMethodSecurity
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(
-            HttpSecurity http,
-            ApiKeyAuthenticationFilter apiKeyFilter) throws Exception {
-        
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
+                                                         KeycloakApiKeyWebFluxConfigurer configurer) {
+        configurer.configure(http);
         return http
-            .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/**").authenticated()
-            )
+            .csrf(ServerHttpSecurity.CsrfSpec::disable)
+            .authorizeExchange(ex -> ex
+                .pathMatchers("/health").permitAll()
+                .anyExchange().authenticated())
             .build();
     }
 }
 ```
 
-The filter chain will:
-1. Check for `X-API-Key` header → validate via introspection
-2. Check for `Authorization: Bearer` header → validate JWT
-3. Reject if neither present
+## Cache
 
-## Error Handling
+Both libraries cache exchanges through Spring's `CacheManager`, so you need a `CacheManager` bean with a cache named `api-keys-tokens` (`TokenCache.CACHE_NAME` for MVC, `ReactiveTokenCache.CACHE_NAME` for WebFlux).
 
 ```java
-@ControllerAdvice
-public class ApiKeyExceptionHandler {
-    
-    @ExceptionHandler(ApiKeyAuthenticationException.class)
-    public ResponseEntity<ErrorResponse> handleApiKeyError(
-            ApiKeyAuthenticationException ex) {
-        
-        return ResponseEntity
-            .status(HttpStatus.UNAUTHORIZED)
-            .body(new ErrorResponse("Invalid API key"));
+@Configuration
+@EnableCaching
+public class CacheConfig {
+
+    @Bean
+    public CacheManager cacheManager() {
+        return new ConcurrentMapCacheManager(TokenCache.CACHE_NAME);
     }
 }
 ```
 
-## Testing
+Expiry is checked at read time against the token's `exp` claim, so even a cache without per-entry TTL, like `ConcurrentMapCacheManager`, never returns a stale token. For production, any provider works (Caffeine, Redis, Hazelcast) as long as it exposes that cache name:
 
 ```java
-@SpringBootTest
-@AutoConfigureMockMvc
-class ApiControllerTest {
-    
-    @Autowired
-    private MockMvc mockMvc;
-    
-    @Test
-    void shouldAuthenticateWithApiKey() throws Exception {
-        mockMvc.perform(get("/api/data")
-                .header("X-API-Key", "test_validkey123"))
-            .andExpect(status().isOk());
-    }
-    
-    @Test
-    void shouldRejectInvalidKey() throws Exception {
-        mockMvc.perform(get("/api/data")
-                .header("X-API-Key", "invalid"))
-            .andExpect(status().isUnauthorized());
-    }
+@Bean
+public CacheManager cacheManager(RedisConnectionFactory factory) {
+    var config = RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofMinutes(5));
+    return RedisCacheManager.builder(factory)
+        .withCacheConfiguration(TokenCache.CACHE_NAME, config)
+        .build();
 }
 ```
 
-## Next Steps
+## Reading claims
 
-- [Node.js Middleware](/keycloak-api-keys/middleware/node/) — Express integration
-- [.NET Middleware](/keycloak-api-keys/middleware/dotnet/) — ASP.NET Core integration
+The authenticated principal is an `ApiKeyAuthenticationToken`:
+
+```java
+@GetMapping("/api/profile")
+public Map<String, Object> profile(Authentication authentication) {
+    var auth = (ApiKeyAuthenticationToken) authentication;
+    Map<String, Object> claims = auth.getClaims();
+    return Map.of(
+        "userId", auth.getName(),            // sub
+        "apiKeyId", claims.get("api_key_id"));
+}
+```
+
+| Method | Returns |
+|--------|---------|
+| `getClaims()` / `getPrincipal()` | Full JWT claim map |
+| `getName()` | `sub` claim, the key owner's user ID |
+| `getAuthorities()` | Realm roles granted to the key, as `ROLE_<name>` |
+
+Because roles become standard authorities, method security works as usual:
+
+```java
+@PreAuthorize("hasRole('reports-reader')")
+@GetMapping("/api/reports")
+public List<Report> reports() { ... }
+```
+
+## Responses
+
+| Situation | Result |
+|-----------|--------|
+| No key | Request continues unauthenticated, and your rules decide (usually `401`) |
+| Unknown, revoked or expired key, or wrong client | `401 Unauthorized` |
+| Rate limit exceeded | `429 Too Many Requests` with rate limit headers forwarded from Keycloak |
+
+Because a request without a key simply passes through, you can put API key auth in the same chain as other mechanisms, such as JWT bearer tokens.

@@ -1,98 +1,120 @@
 ---
 title: Keycloak API Keys
-description: API Key authentication for Keycloak. Because OAuth2 is great until your IoT toaster needs to authenticate.
+description: API key authentication for Keycloak. Users issue their own keys, your services get standard Keycloak JWTs.
 template: splash
 hero:
-  title: Keycloak API Keys
-  tagline: API Key authentication for Keycloak. Because OAuth2 is great until your IoT toaster needs to authenticate.
+  title: API keys for Keycloak
+  tagline: Let users issue their own scoped API keys and trade them for standard Keycloak JWTs. Because OAuth2 is great until your IoT toaster needs to authenticate.
   image:
     file: ../../assets/logo.svg
   actions:
-    - text: Get Started
+    - text: Get started
       link: /keycloak-api-keys/getting-started/introduction/
       icon: right-arrow
       variant: primary
     - text: View on GitHub
       link: https://github.com/emdzej/keycloak-api-keys
-      icon: external
+      icon: github
+      variant: secondary
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-## Why API Keys?
+## Why API keys?
 
-<CardGrid stagger>
-  <Card title="Simple Authentication" icon="key">
-    Not everything speaks OAuth2. CLI tools, IoT devices, scripts, and legacy systems often just need a simple API key.
+Not everything can run a browser login. CLI tools, CI jobs, cron scripts, IoT devices and third-party integrations just want a key. This extension gives them one without adding a second identity system next to Keycloak.
+
+<CardGrid>
+  <Card title="Self-service" icon="laptop">
+    Users create, list and revoke their own keys in the Keycloak Account Console. Admins get a REST API for everything else.
   </Card>
-  <Card title="Keycloak as Authority" icon="shield">
-    Keycloak validates every request. No local JWT validation, no token expiry headaches. The key is valid until you revoke it.
+  <Card title="Standard JWTs out" icon="approve-check">
+    Keys are exchanged at the regular token endpoint. Your services keep validating ordinary Keycloak access tokens.
   </Card>
-  <Card title="Per-Client Prefixes" icon="tag">
-    Each client gets its own prefix (`myapp_xxx`). Know at a glance which application a key belongs to.
+  <Card title="Recognisable keys" icon="list-format">
+    Keys start with their client's ID, like `myapp_…`, so a leaked key tells you where it came from at a glance.
   </Card>
-  <Card title="Full Audit Trail" icon="document">
-    Every key creation, usage, and revocation is logged. See who created what and when it was last used.
+  <Card title="Hashed at rest" icon="padlock">
+    Only SHA-256 hashes are stored. Keys are shown once, can expire, and can be revoked instantly.
+  </Card>
+  <Card title="Rate limited" icon="clock">
+    Per-minute, hour and day limits per client or realm. Callers get a `429` with `X-RateLimit-*` headers.
+  </Card>
+  <Card title="Audited" icon="document">
+    Key creation, use and revocation emit Keycloak events, so they show up wherever your events already go.
   </Card>
 </CardGrid>
 
-## How It Works
+## How it works
 
-```
-┌─────────┐         ┌──────────────┐         ┌──────────────┐
-│ Client  │──────▶  │  Your API    │──────▶  │  Keycloak    │
-│         │  API    │  (middleware)│  token  │  (validates) │
-│         │  Key    │              │  intro  │              │
-└─────────┘         └──────────────┘         └──────────────┘
-```
+<Steps>
 
-1. Client sends request with `X-API-Key` header
-2. Middleware calls Keycloak's token introspection endpoint
-3. Keycloak validates the key and returns the associated client/scopes
-4. Your API processes the request with full identity context
+1. A client calls your API with the key in the `X-API-Key` header.
 
-## Middleware Libraries
+2. The middleware exchanges it at Keycloak's token endpoint using the `urn:ietf:params:oauth:grant-type:api-key` grant.
 
-Ready-to-use middleware for your stack:
+   ```bash
+   curl -X POST https://auth.example.com/realms/my-realm/protocol/openid-connect/token \
+     -d grant_type=urn:ietf:params:oauth:grant-type:api-key \
+     -d client_id=my-app -d client_secret=$CLIENT_SECRET \
+     -d api_key=myapp_a1b2c3…
+   ```
 
-<CardGrid>
-  <Card title="Java / Spring Boot" icon="java">
-    ```xml
-    <dependency>
-      <groupId>pl.emdzej.keycloak</groupId>
-      <artifactId>keycloak-api-keys-spring-boot-starter</artifactId>
-    </dependency>
-    ```
-  </Card>
-  <Card title="Node.js / Express" icon="node">
+3. Keycloak checks the key's hash, expiry, scopes and rate limit, then issues a normal access token for the key's owner.
+
+4. Your handler gets the decoded claims (`sub`, roles, scopes, `api_key_id`). Results are cached, so Keycloak isn't hit on every request.
+
+</Steps>
+
+## Middleware
+
+Drop-in integrations for the stacks you already run.
+
+<Tabs syncKey="stack">
+  <TabItem label="Express">
     ```bash
-    npm install @emdzej/keycloak-api-keys-node
+    pnpm add @emdzej/keycloak-api-keys-express
     ```
-  </Card>
-  <Card title=".NET / ASP.NET Core" icon="dotnet">
+
+    ```ts
+    import express from 'express';
+    import { keycloakApiKey } from '@emdzej/keycloak-api-keys-express';
+
+    const app = express();
+
+    app.use('/api', keycloakApiKey({
+      serverUrl: 'https://auth.example.com',
+      realm: 'my-realm',
+      clientId: 'my-app',
+      clientSecret: process.env.CLIENT_SECRET,
+    }));
+
+    app.get('/api/me', (req, res) => {
+      res.json({ user: req.auth?.sub, roles: req.auth?.realm_access?.roles });
+    });
+    ```
+  </TabItem>
+  <TabItem label="Fastify">
+    ```bash
+    pnpm add @emdzej/keycloak-api-keys-fastify
+    ```
+  </TabItem>
+  <TabItem label="Hono">
+    ```bash
+    pnpm add @emdzej/keycloak-api-keys-hono
+    ```
+  </TabItem>
+  <TabItem label="Spring">
+    ```kotlin
+    // MVC / servlet
+    implementation("pl.emdzej.keycloak:keycloak-api-keys-spring:0.1.0")
+    // or WebFlux
+    implementation("pl.emdzej.keycloak:keycloak-api-keys-spring-webflux:0.1.0")
+    ```
+  </TabItem>
+  <TabItem label="ASP.NET Core">
     ```bash
     dotnet add package EmDzej.KeycloakApiKeyAuthentication
     ```
-  </Card>
-</CardGrid>
-
-## Quick Example
-
-```typescript
-import express from 'express';
-import { apiKeyAuth } from '@emdzej/keycloak-api-keys-node';
-
-const app = express();
-
-app.use(apiKeyAuth({
-  keycloakUrl: 'https://auth.example.com',
-  realm: 'my-realm',
-  clientId: 'my-api',
-  clientSecret: process.env.CLIENT_SECRET,
-}));
-
-app.get('/api/data', (req, res) => {
-  // req.apiKey contains validated key info
-  res.json({ message: 'Authenticated!' });
-});
-```
+  </TabItem>
+</Tabs>

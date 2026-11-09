@@ -1,58 +1,74 @@
 ---
 title: Introduction
-description: What is Keycloak API Keys and why you might need it.
+description: What Keycloak API Keys is, how it works, and when to use it.
 ---
 
-# Introduction
+**Keycloak API Keys** is a Keycloak extension that lets users issue long-lived API keys and exchange them for regular Keycloak access tokens. It ships as a provider JAR plus middleware for the common backend stacks.
 
-**Keycloak API Keys** is a Keycloak SPI (Service Provider Interface) extension that adds API key management capabilities to your Keycloak instance.
+## The problem
 
-## The Problem
+OAuth2 and OpenID Connect work well when there's a person and a browser. A lot of callers have neither:
 
-OAuth2 and OpenID Connect are fantastic for user authentication and authorization. But not every client speaks OAuth2:
-
-- **CLI tools** that need to authenticate without a browser flow
+- **CLI tools** that can't run a browser login
+- **CI jobs, scripts and cron tasks** that run unattended
 - **IoT devices** with limited capabilities
-- **Scripts and cron jobs** that run unattended
-- **Legacy systems** that can't be easily updated
-- **Third-party integrations** that expect API keys
+- **Third-party integrations** that only know how to send a static key
 
-You could issue long-lived tokens, but that's a security risk. You could build a custom API key system, but then you have two identity systems to manage.
+The usual workarounds are a service-account client with a shared secret, which users can't manage themselves, or a homegrown key system. The second gives you a second identity store to keep in sync with Keycloak.
 
-## The Solution
+## How it works
 
-Keycloak API Keys brings API key management into Keycloak itself:
+1. A user creates a key for a specific client, either in the Account Console or through the REST API. They can limit it to a subset of their roles and the client's scopes, and give it an expiry date.
+2. Keycloak stores only a hash of the key and returns the plain key once.
+3. The caller sends the key to your API, by default in the `X-API-Key` header.
+4. Your middleware exchanges the key at the realm's token endpoint using a custom grant:
 
-- **Single source of truth** — Keycloak remains your identity authority
-- **Token introspection** — Keys are validated through standard OAuth2 introspection
-- **Per-client prefixes** — Each client has its own prefix for easy identification
-- **Full lifecycle** — Create, list, revoke, and audit keys through the API or Admin UI
-- **Scopes and roles** — Keys inherit the client's configured scopes and roles
+   ```http
+   POST /realms/my-realm/protocol/openid-connect/token
+   Content-Type: application/x-www-form-urlencoded
 
-## Key Format
+   grant_type=urn:ietf:params:oauth:grant-type:api-key&api_key=myapp_…&client_id=my-app&client_secret=…
+   ```
 
-API keys follow a simple format:
+5. Keycloak checks the key (hash, revocation, expiry, client binding, owner still enabled, rate limit) and issues a normal access token for the key's owner. The token runs through your protocol mappers like any other.
+6. The middleware caches the result and hands your code the decoded claims.
+
+Your services keep working with Keycloak JWTs. The key is just another way to get one.
+
+## Key format
 
 ```
-{prefix}_{64_random_chars}
+{prefix}_{64 random characters}
 ```
 
-For example:
 ```
-myapp_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+myapp_Xk9fQ2mT7vLp3RwYb8NcZ1aHs5JdG4eKu6iOy0tBqVxW2nMr7FgEj3hPl9CzDs
 ```
 
-The prefix is configured per-client, making it easy to identify which application a key belongs to just by looking at it.
+The prefix comes from the client ID: lowercased, with non-alphanumeric characters removed, and cut to 15 characters. A key found in a log or a repository therefore tells you which application it belongs to.
 
-## Security
+## What's in the token
 
-- Keys are stored as SHA-256 hashes — the original key cannot be recovered
-- Each key is bound to a specific client
-- Keys can be revoked instantly
-- All operations are audited
-- Rate limiting is supported
+The exchanged JWT carries the standard Keycloak claims, narrowed to what the key was granted:
 
-## Next Steps
+| Claim | Value |
+|-------|-------|
+| `sub` | The key owner's user ID |
+| `azp` | The client the key is bound to |
+| `api_key_id` | ID of the key used |
+| `realm_access.roles` | The owner's realm roles, limited to those granted to the key |
+| `resource_access` | The same, for client roles |
+| `scope` | The key's scopes combined with the client's default scopes |
 
-- [Installation](/keycloak-api-keys/getting-started/installation/) — Deploy the SPI to your Keycloak instance
-- [Quick Start](/keycloak-api-keys/getting-started/quick-start/) — Create your first API key in 5 minutes
+## Security model
+
+- Keys are stored as SHA-256 hashes, or HMAC-SHA-256 when an `API_KEY_PEPPER` is configured. The plain key can't be recovered.
+- Each key is bound to one client. Exchanging it with a different `client_id` fails.
+- A key can never grant more than its owner has. If the owner is disabled, the key stops working.
+- Keys can be revoked at any time. An expiry date is optional. If you set one, it can be at most the realm's maximum TTL (1 year by default).
+- Exchanges are rate limited, with limits configured per client or per realm. Key lifecycle actions emit Keycloak events.
+
+## Next steps
+
+- [Installation](/keycloak-api-keys/getting-started/installation/): add the provider to Keycloak
+- [Quick Start](/keycloak-api-keys/getting-started/quick-start/): create a key and call a protected API

@@ -16,6 +16,9 @@ export default defineConfig({
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/emdzej/keycloak-api-keys' },
 			],
 			customCss: ['./src/styles/custom.css'],
+			expressiveCode: {
+				themes: ['github-dark-default', 'github-light'],
+			},
 			sidebar: [
 				{
 					label: 'Getting Started',
@@ -36,8 +39,8 @@ export default defineConfig({
 				{
 					label: 'Middleware',
 					items: [
-						{ label: 'Java / Spring Boot', slug: 'middleware/java' },
-						{ label: 'Node.js / Express', slug: 'middleware/node' },
+						{ label: 'Java / Spring', slug: 'middleware/java' },
+						{ label: 'Node.js', slug: 'middleware/node' },
 						{ label: '.NET / ASP.NET Core', slug: 'middleware/dotnet' },
 					],
 				},

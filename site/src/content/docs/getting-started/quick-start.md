@@ -1,120 +1,108 @@
 ---
 title: Quick Start
-description: Create and use your first API key in 5 minutes.
+description: Create an API key and call a protected API in a few minutes.
 ---
 
-# Quick Start
+This walkthrough uses the local Docker setup and the built-in `admin-cli` client, so nothing has to be configured first. For a real deployment, swap in your own realm and client.
 
-This guide will have you creating and validating API keys in under 5 minutes.
-
-## Prerequisites
-
-- Keycloak with API Keys SPI installed ([Installation](/keycloak-api-keys/getting-started/installation/))
-- A realm and confidential client configured
-
-## Step 1: Configure a Client
-
-1. Open the Keycloak Admin Console
-2. Navigate to your realm → **Clients**
-3. Select or create a confidential client
-4. Go to the **API Keys** tab
-5. Enable API Keys for this client
-6. Set a **Key Prefix** (e.g., `myapp`)
-
-## Step 2: Create an API Key
-
-Using the Admin API:
+## 1. Start Keycloak
 
 ```bash
-# Get an admin token
-ADMIN_TOKEN=$(curl -s -X POST \
-  "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli" \
-  -d "username=admin" \
-  -d "password=admin" \
-  -d "grant_type=password" | jq -r '.access_token')
-
-# Create an API key
-curl -X POST \
-  "http://localhost:8080/admin/realms/my-realm/clients/{client-id}/api-keys" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My First Key"}'
+git clone https://github.com/emdzej/keycloak-api-keys.git
+cd keycloak-api-keys
+./scripts/dev.sh
 ```
 
-Response:
+Keycloak comes up at `http://localhost:8080` (`admin` / `admin`) with the provider installed.
+
+## 2. Create a key
+
+### In the Account Console
+
+Set the realm's account theme to `api-keys` (see [Installation](/keycloak-api-keys/getting-started/installation/#enable-the-account-console-ui)). Then open `http://localhost:8080/realms/master/account`, go to **API Keys**, and create a key for a client.
+
+### With the REST API
+
+Users create keys for themselves at `/realms/{realm}/api-keys`, authenticated with their own access token:
+
+```bash
+TOKEN=$(curl -s http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=admin-cli \
+  -d username=admin -d password=admin | jq -r .access_token)
+
+curl -s -X POST http://localhost:8080/realms/master/api-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-first-key", "clientId": "admin-cli"}'
+```
+
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "My First Key",
-  "prefix": "myapp",
-  "key": "myapp_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2",
-  "createdAt": "2024-01-15T10:30:00Z"
+  "id": "6f1c…",
+  "key": "admincli_Xk9fQ2mT7vLp3RwYb8NcZ1aHs5JdG4eKu6iOy0tBqVxW2nMr7FgEj3hPl9Cz",
+  "name": "my-first-key",
+  "clientId": "admin-cli",
+  "keyPrefix": "admincli_",
+  "createdAt": "2026-11-09T10:30:00Z",
+  "expiresAt": null
 }
 ```
 
 :::caution
-Save the `key` value immediately! It's only shown once and cannot be retrieved later.
+Copy the `key` now. Only its hash is stored, so it can't be shown again.
 :::
 
-## Step 3: Validate the Key
+The request body also accepts `roles`, `scopes` and `expiresAt` to narrow what the key can do. You can only grant roles you have yourself. The user needs a role on the client, unless the client is public.
 
-Use standard OAuth2 token introspection:
+## 3. Exchange it for a token
+
+This is what the middleware does on every cache miss:
 
 ```bash
-curl -X POST \
-  "http://localhost:8080/realms/my-realm/protocol/openid-connect/token/introspect" \
-  -d "client_id=my-client" \
-  -d "client_secret=my-secret" \
-  -d "token=myapp_a1b2c3d4e5f6..."
+curl -s http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -d grant_type=urn:ietf:params:oauth:grant-type:api-key \
+  -d client_id=admin-cli \
+  -d api_key=admincli_Xk9fQ2… | jq
 ```
 
-Response:
-```json
-{
-  "active": true,
-  "client_id": "my-client",
-  "token_type": "api_key",
-  "scope": "openid profile",
-  "api_key_id": "550e8400-e29b-41d4-a716-446655440000",
-  "api_key_name": "My First Key"
-}
+You get a standard token response. The `access_token` is a normal Keycloak JWT with an extra `api_key_id` claim. Confidential clients also need `client_secret`, and the `client_id` must be the one the key was created for.
+
+## 4. Protect an API
+
+With Express:
+
+```bash
+pnpm add @emdzej/keycloak-api-keys-express express
 ```
 
-## Step 4: Use in Your Application
-
-With the Node.js middleware:
-
-```typescript
+```ts
 import express from 'express';
-import { apiKeyAuth } from '@emdzej/keycloak-api-keys-node';
+import { keycloakApiKey } from '@emdzej/keycloak-api-keys-express';
 
 const app = express();
 
-app.use(apiKeyAuth({
-  keycloakUrl: 'http://localhost:8080',
-  realm: 'my-realm',
-  clientId: 'my-client',
-  clientSecret: 'my-secret',
+app.use('/api', keycloakApiKey({
+  serverUrl: 'http://localhost:8080',
+  realm: 'master',
+  clientId: 'admin-cli',
 }));
 
-app.get('/api/protected', (req, res) => {
-  console.log('API Key:', req.apiKey.name);
-  res.json({ message: 'Hello from protected route!' });
+app.get('/api/profile', (req, res) => {
+  res.json({ userId: req.auth?.sub, apiKeyId: req.auth?.api_key_id });
 });
 
 app.listen(3000);
 ```
 
-Test it:
-
 ```bash
-curl http://localhost:3000/api/protected \
-  -H "X-API-Key: myapp_a1b2c3d4e5f6..."
+curl http://localhost:3000/api/profile -H "X-API-Key: admincli_Xk9fQ2…"
+# {"userId":"…","apiKeyId":"6f1c…"}
 ```
 
-## Next Steps
+The repository has the same demo for every supported stack. See the [README](https://github.com/emdzej/keycloak-api-keys#demo-applications).
 
-- [Client Settings](/keycloak-api-keys/configuration/client/) — Configure key expiration, rate limits
-- [Middleware](/keycloak-api-keys/middleware/java/) — Integrate with your stack
-- [API Reference](/keycloak-api-keys/api/admin/) — Full API documentation
+## Next steps
+
+- [Middleware](/keycloak-api-keys/middleware/node/): Node.js, Spring and .NET integrations
+- [Client Settings](/keycloak-api-keys/configuration/client/): rate limits and key lifetime
+- [Admin API](/keycloak-api-keys/api/admin/): manage keys for other users
