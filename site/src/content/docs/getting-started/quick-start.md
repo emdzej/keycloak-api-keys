@@ -23,6 +23,8 @@ Set the realm's account theme to `api-keys` (see [Installation](/keycloak-api-ke
 
 ### With the Admin API
 
+Or with [kcctl](/keycloak-api-keys/getting-started/kcctl/): `kcctl api-key create admin --name my-first-key --client admin-cli`.
+
 An admin can create a key on behalf of any user:
 
 ```bash
@@ -113,3 +115,4 @@ The repository has the same demo for every supported stack. See the [README](htt
 - [Middleware](/keycloak-api-keys/middleware/node/): Node.js, Spring and .NET integrations
 - [Client Settings](/keycloak-api-keys/configuration/client/): rate limits and key lifetime
 - [Admin API](/keycloak-api-keys/api/admin/): manage keys for other users
+- [kcctl](/keycloak-api-keys/getting-started/kcctl/): manage keys from the command line

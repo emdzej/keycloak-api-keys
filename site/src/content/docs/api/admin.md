@@ -200,7 +200,7 @@ kcctl api-key stats <id>
 kcctl api-key revoke <id>
 ```
 
-`create` prints the plain key once, like the REST response. Requires `view-realm` and kcctl 0.2.0 or later. With older setups, or without discovery, install the manifest manually: `kcctl extension install kcctl-extension.yaml` (from `spi/src/main/resources/`).
+`create` prints the plain key once, like the REST response. Requires `view-realm` and kcctl 0.2.0 or later. See [Managing Keys with kcctl](/keycloak-api-keys/getting-started/kcctl/) for a walkthrough. With older setups, or without discovery, install the manifest manually: `kcctl extension install kcctl-extension.yaml` (from `spi/src/main/resources/`).
 
 ## OpenAPI
 

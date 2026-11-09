@@ -12,6 +12,11 @@ Keycloak extension for API key management — generate, validate, and exchange A
 
 This project extends Keycloak with API key capabilities, allowing users to generate API keys that can be exchanged for JWT tokens. API keys are scoped to specific clients and can have granular permissions.
 
+Keys can be managed from the Account Console, the Admin REST API, or the command line with
+[kcctl](https://github.com/emdzej/kcctl): the extension ships a kcctl manifest that adds `kcctl api-key`
+commands (enable it with `--spi-admin-realm-restapi-extension--api-keys--kcctl-extension-enabled=true`;
+see [Managing Keys with kcctl](https://emdzej.github.io/keycloak-api-keys/getting-started/kcctl/)).
+
 ## Components
 
 | Module | Language | Description |

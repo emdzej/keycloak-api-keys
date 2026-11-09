@@ -26,7 +26,7 @@ Not everything can run a browser login. CLI tools, CI jobs, cron scripts, IoT de
 
 <CardGrid>
   <Card title="Self-service" icon="laptop">
-    Users create, list and revoke their own keys in the Keycloak Account Console. Admins get a REST API for everything else.
+    Users create, list and revoke their own keys in the Keycloak Account Console. Admins get a REST API, and [`kcctl api-key`](/keycloak-api-keys/getting-started/kcctl/) commands on the command line.
   </Card>
   <Card title="Standard JWTs out" icon="approve-check">
     Keys are exchanged at the regular token endpoint. Your services keep validating ordinary Keycloak access tokens.
@@ -107,9 +107,9 @@ Drop-in integrations for the stacks you already run.
   <TabItem label="Spring">
     ```kotlin
     // MVC / servlet
-    implementation("pl.emdzej.keycloak:keycloak-api-keys-spring:0.1.0")
+    implementation("pl.emdzej.keycloak:keycloak-api-keys-spring:0.2.0")
     // or WebFlux
-    implementation("pl.emdzej.keycloak:keycloak-api-keys-spring-webflux:0.1.0")
+    implementation("pl.emdzej.keycloak:keycloak-api-keys-spring-webflux:0.2.0")
     ```
   </TabItem>
   <TabItem label="ASP.NET Core">
