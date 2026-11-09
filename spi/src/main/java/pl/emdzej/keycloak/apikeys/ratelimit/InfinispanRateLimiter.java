@@ -16,39 +16,86 @@
 
 package pl.emdzej.keycloak.apikeys.ratelimit;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.infinispan.Cache;
+import org.infinispan.commons.api.CacheContainerAdmin;
+import org.infinispan.configuration.cache.CacheMode;
+import org.infinispan.configuration.cache.ConfigurationBuilder;
+import org.infinispan.manager.EmbeddedCacheManager;
 import org.jboss.logging.Logger;
 import org.keycloak.connections.infinispan.InfinispanConnectionProvider;
 import org.keycloak.models.KeycloakSession;
 
+/**
+ * Cluster-wide fixed-window rate limiter backed by the {@value #CACHE_NAME} Infinispan cache.
+ *
+ * <p>Values are plain {@code Long} counters keyed by {@code keyId:window:windowStart} and
+ * updated with {@code putIfAbsent}/{@code replace} CAS loops. Keycloak's ProtoStream marshaller
+ * handles {@code Long} natively, so the cache also works in clustered (DIST) mode without
+ * registering custom schemas or serializing lambdas.
+ *
+ * <p>If the cache is not defined in the Keycloak cache configuration it is created at runtime
+ * (distributed when the cache manager is clustered, local otherwise). An operator-defined
+ * cache with the same name always takes precedence.
+ */
 public class InfinispanRateLimiter implements RateLimiter {
     private static final Logger LOGGER = Logger.getLogger(InfinispanRateLimiter.class);
-    private static final String CACHE_NAME = "api-keys-rate-limit";
+    static final String CACHE_NAME = "api-keys-rate-limit";
+    private static final int MAX_CAS_ATTEMPTS = 32;
 
-    private final Cache<String, RateLimitEntry> cache;
+    private final Cache<String, Long> cache;
     private final Map<String, RateLimitConfig> configs = new ConcurrentHashMap<>();
 
     public InfinispanRateLimiter(KeycloakSession session) {
-        this.cache = session.getProvider(InfinispanConnectionProvider.class).getCache(CACHE_NAME);
+        this(getOrCreateCache(session.getProvider(InfinispanConnectionProvider.class)));
+    }
+
+    InfinispanRateLimiter(Cache<String, Long> cache) {
+        this.cache = cache;
+    }
+
+    static Cache<String, Long> getOrCreateCache(InfinispanConnectionProvider provider) {
+        EmbeddedCacheManager cacheManager =
+            provider.getCache(InfinispanConnectionProvider.WORK_CACHE_NAME).getCacheManager();
+        if (cacheManager.getCacheConfiguration(CACHE_NAME) != null) {
+            return cacheManager.getCache(CACHE_NAME);
+        }
+        ConfigurationBuilder builder = new ConfigurationBuilder();
+        boolean clustered = cacheManager.getCacheManagerConfiguration().isClustered();
+        builder.clustering().cacheMode(clustered ? CacheMode.DIST_SYNC : CacheMode.LOCAL);
+        // Safety net only: every entry gets an explicit lifespan matching its window.
+        builder.expiration().lifespan(Window.DAY.durationMs + 60_000L, TimeUnit.MILLISECONDS);
+        LOGGER.infof("Creating Infinispan cache '%s' (%s)", CACHE_NAME, clustered ? "DIST_SYNC" : "LOCAL");
+        return cacheManager.administration()
+            .withFlags(CacheContainerAdmin.AdminFlag.VOLATILE)
+            .getOrCreateCache(CACHE_NAME, builder.build());
     }
 
     @Override
     public void updateConfig(String keyId, RateLimitConfig config) {
-        configs.put(keyId, normalize(config));
+        configs.put(keyId, RateLimitConfig.normalize(config));
     }
 
     @Override
     public boolean tryAcquire(String keyId) {
         RateLimitConfig config = getConfig(keyId);
-        boolean allowed = true;
-        allowed &= incrementAndCheck(keyId, "minute", config.perMinute(), TimeUnit.MINUTES.toMillis(1));
-        allowed &= incrementAndCheck(keyId, "hour", config.perHour(), TimeUnit.HOURS.toMillis(1));
-        allowed &= incrementAndCheck(keyId, "day", config.perDay(), TimeUnit.DAYS.toMillis(1));
-        allowed &= incrementAndCheck(keyId, "burst", config.burst(), TimeUnit.MINUTES.toMillis(1));
-        return allowed;
+        long nowMs = System.currentTimeMillis();
+        List<Window> limited = Window.limitedFor(config);
+
+        // Check every window before consuming, so a rejected request doesn't burn
+        // hour/day quota. Concurrent callers can overshoot by at most their number.
+        for (Window window : limited) {
+            if (currentCount(keyId, window, nowMs) >= window.limit(config)) {
+                return false;
+            }
+        }
+        for (Window window : limited) {
+            increment(keyId, window, nowMs);
+        }
+        return true;
     }
 
     @Override
@@ -56,29 +103,27 @@ public class InfinispanRateLimiter implements RateLimiter {
         RateLimitConfig config = getConfig(keyId);
         long nowMs = System.currentTimeMillis();
 
-        WindowInfo minute = getWindowInfo(keyId, "minute", config.perMinute(), TimeUnit.MINUTES.toMillis(1), nowMs);
-        WindowInfo hour = getWindowInfo(keyId, "hour", config.perHour(), TimeUnit.HOURS.toMillis(1), nowMs);
-        WindowInfo day = getWindowInfo(keyId, "day", config.perDay(), TimeUnit.DAYS.toMillis(1), nowMs);
-        WindowInfo burst = getWindowInfo(keyId, "burst", config.burst(), TimeUnit.MINUTES.toMillis(1), nowMs);
-
-        int remaining = Math.min(
-            Math.min(minute.remaining, hour.remaining),
-            Math.min(day.remaining, burst.remaining)
-        );
-        long resetAt = Math.max(
-            Math.max(minute.resetAtEpochSeconds, hour.resetAtEpochSeconds),
-            Math.max(day.resetAtEpochSeconds, burst.resetAtEpochSeconds)
-        );
-        return new RateLimitInfo(config.perMinute(), Math.max(remaining, 0), resetAt);
+        int remaining = Integer.MAX_VALUE;
+        long blockedUntil = 0;
+        for (Window window : Window.limitedFor(config)) {
+            int windowRemaining = (int) Math.max(window.limit(config) - currentCount(keyId, window, nowMs), 0);
+            remaining = Math.min(remaining, windowRemaining);
+            if (windowRemaining == 0) {
+                blockedUntil = Math.max(blockedUntil, window.endMs(nowMs));
+            }
+        }
+        // Reset is when the caller can retry: the latest exhausted window, otherwise the minute window.
+        long resetAtMs = blockedUntil > 0 ? blockedUntil : Window.MINUTE.endMs(nowMs);
+        return new RateLimitInfo(config.perMinute(), remaining, Math.ceilDiv(resetAtMs, 1000L));
     }
 
     @Override
     public void reset(String keyId) {
         configs.remove(keyId);
-        cache.remove(buildKey(keyId, "minute"));
-        cache.remove(buildKey(keyId, "hour"));
-        cache.remove(buildKey(keyId, "day"));
-        cache.remove(buildKey(keyId, "burst"));
+        long nowMs = System.currentTimeMillis();
+        for (Window window : Window.values()) {
+            cache.remove(window.cacheKey(keyId, nowMs));
+        }
     }
 
     @Override
@@ -86,80 +131,70 @@ public class InfinispanRateLimiter implements RateLimiter {
         return cache != null && cache.getStatus().allowInvocations();
     }
 
-    private boolean incrementAndCheck(String keyId, String windowName, int limit, long windowDurationMs) {
-        if (limit <= 0) {
-            return true;
-        }
-        long nowMs = System.currentTimeMillis();
-        String cacheKey = buildKey(keyId, windowName);
-        RateLimitEntry entry = cache.compute(cacheKey, (key, existing) -> {
-            if (existing == null || isExpired(existing, nowMs)) {
-                return new RateLimitEntry(1, nowMs, windowDurationMs);
+    private long currentCount(String keyId, Window window, long nowMs) {
+        Long count = cache.get(window.cacheKey(keyId, nowMs));
+        return count != null ? count : 0L;
+    }
+
+    private void increment(String keyId, Window window, long nowMs) {
+        String cacheKey = window.cacheKey(keyId, nowMs);
+        long lifespanMs = Math.max(window.endMs(nowMs) - nowMs, 1L);
+        for (int attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+            Long existing = cache.putIfAbsent(cacheKey, 1L, lifespanMs, TimeUnit.MILLISECONDS);
+            if (existing == null) {
+                return;
             }
-            return new RateLimitEntry(existing.count() + 1, existing.windowStart(), existing.windowDurationMs());
-        });
-        updateTtl(cacheKey, entry, nowMs);
-        return entry.count() <= limit;
-    }
-
-    private WindowInfo getWindowInfo(String keyId, String windowName, int limit, long windowDurationMs, long nowMs) {
-        if (limit <= 0) {
-            return new WindowInfo(limit, 0, nowMs / 1000);
+            if (cache.replace(cacheKey, existing, existing + 1, lifespanMs, TimeUnit.MILLISECONDS)) {
+                return;
+            }
         }
-        String cacheKey = buildKey(keyId, windowName);
-        RateLimitEntry entry = cache.get(cacheKey);
-        if (entry == null || isExpired(entry, nowMs)) {
-            return new WindowInfo(limit, limit, nowMs / 1000);
-        }
-        long resetAt = (entry.windowStart() + windowDurationMs) / 1000;
-        int remaining = (int) Math.max(limit - entry.count(), 0);
-        return new WindowInfo(limit, remaining, resetAt);
-    }
-
-    private void updateTtl(String cacheKey, RateLimitEntry entry, long nowMs) {
-        long windowEndMs = entry.windowStart() + entry.windowDurationMs();
-        long lifespanMs = Math.max(windowEndMs - nowMs, 1);
-        try {
-            cache.put(cacheKey, entry, lifespanMs, TimeUnit.MILLISECONDS);
-        } catch (Exception ex) {
-            LOGGER.debugf(ex, "Failed to update TTL for rate limit cache key %s", cacheKey);
-        }
-    }
-
-    private boolean isExpired(RateLimitEntry entry, long nowMs) {
-        return entry.windowStart() + entry.windowDurationMs() <= nowMs;
-    }
-
-    private String buildKey(String keyId, String windowName) {
-        return keyId + ":" + windowName;
+        LOGGER.debugf("Gave up incrementing rate limit counter %s after %d attempts", cacheKey, MAX_CAS_ATTEMPTS);
     }
 
     private RateLimitConfig getConfig(String keyId) {
         return configs.getOrDefault(keyId, RateLimitConfig.defaults());
     }
 
-    private RateLimitConfig normalize(RateLimitConfig config) {
-        RateLimitConfig defaults = RateLimitConfig.defaults();
-        if (config == null) {
-            return defaults;
+    /** Fixed, epoch-aligned windows. {@code burst} is enforced per second. */
+    enum Window {
+        SECOND("s", 1_000L),
+        MINUTE("m", 60_000L),
+        HOUR("h", 3_600_000L),
+        DAY("d", 86_400_000L);
+
+        private final String id;
+        final long durationMs;
+
+        Window(String id, long durationMs) {
+            this.id = id;
+            this.durationMs = durationMs;
         }
-        return new RateLimitConfig(
-            config.perMinute() > 0 ? config.perMinute() : defaults.perMinute(),
-            config.perHour() > 0 ? config.perHour() : defaults.perHour(),
-            config.perDay() > 0 ? config.perDay() : defaults.perDay(),
-            config.burst() > 0 ? config.burst() : defaults.burst()
-        );
-    }
 
-    private static class WindowInfo {
-        private final int limit;
-        private final int remaining;
-        private final long resetAtEpochSeconds;
+        int limit(RateLimitConfig config) {
+            return switch (this) {
+                case SECOND -> config.burst();
+                case MINUTE -> config.perMinute();
+                case HOUR -> config.perHour();
+                case DAY -> config.perDay();
+            };
+        }
 
-        private WindowInfo(int limit, int remaining, long resetAtEpochSeconds) {
-            this.limit = limit;
-            this.remaining = remaining;
-            this.resetAtEpochSeconds = resetAtEpochSeconds;
+        long startMs(long nowMs) {
+            return nowMs - (nowMs % durationMs);
+        }
+
+        long endMs(long nowMs) {
+            return startMs(nowMs) + durationMs;
+        }
+
+        String cacheKey(String keyId, long nowMs) {
+            return keyId + ":" + id + ":" + startMs(nowMs);
+        }
+
+        static List<Window> limitedFor(RateLimitConfig config) {
+            return java.util.Arrays.stream(values())
+                .filter(w -> !RateLimitConfig.isUnlimited(w.limit(config)))
+                .toList();
         }
     }
 }

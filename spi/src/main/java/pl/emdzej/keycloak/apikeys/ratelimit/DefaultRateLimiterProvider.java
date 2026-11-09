@@ -27,10 +27,20 @@ public class DefaultRateLimiterProvider implements RateLimiterProvider {
     static final String FAIL_CLOSED_ATTR = "apiKeysRateLimitFailClosed";
 
     private final KeycloakSession session;
+    private final InMemoryRateLimiter inMemoryFallback;
     private volatile RateLimiter rateLimiter;
 
     public DefaultRateLimiterProvider(KeycloakSession session) {
+        this(session, new InMemoryRateLimiter());
+    }
+
+    /**
+     * @param inMemoryFallback node-wide limiter shared across sessions, used when
+     *                         Infinispan is unavailable and fail-closed mode is off
+     */
+    public DefaultRateLimiterProvider(KeycloakSession session, InMemoryRateLimiter inMemoryFallback) {
         this.session = session;
+        this.inMemoryFallback = inMemoryFallback;
     }
 
     @Override
@@ -80,7 +90,7 @@ public class DefaultRateLimiterProvider implements RateLimiterProvider {
         }
         LOGGER.warn("Infinispan unavailable; falling back to in-memory rate limiter (per-node only). " +
                     "Set realm attribute '" + FAIL_CLOSED_ATTR + "'=true to enable fail-closed mode.");
-        return new InMemoryRateLimiter();
+        return inMemoryFallback;
     }
 
     private boolean isFailClosedEnabled() {

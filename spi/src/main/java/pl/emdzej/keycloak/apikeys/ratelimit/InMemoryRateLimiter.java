@@ -30,7 +30,7 @@ public class InMemoryRateLimiter implements RateLimiter {
 
     @Override
     public void updateConfig(String keyId, RateLimitConfig config) {
-        RateLimitConfig normalized = normalize(config);
+        RateLimitConfig normalized = RateLimitConfig.normalize(config);
         entries.compute(keyId, (id, entry) -> {
             if (entry == null) {
                 return new Entry(normalized);
@@ -77,19 +77,6 @@ public class InMemoryRateLimiter implements RateLimiter {
         entries.entrySet().removeIf(entry -> entry.getValue().lastAccessEpochSeconds() < cutoff);
     }
 
-    private RateLimitConfig normalize(RateLimitConfig config) {
-        RateLimitConfig defaults = RateLimitConfig.defaults();
-        if (config == null) {
-            return defaults;
-        }
-        return new RateLimitConfig(
-            config.perMinute() > 0 ? config.perMinute() : defaults.perMinute(),
-            config.perHour() > 0 ? config.perHour() : defaults.perHour(),
-            config.perDay() > 0 ? config.perDay() : defaults.perDay(),
-            config.burst() > 0 ? config.burst() : defaults.burst()
-        );
-    }
-
     private static class Entry {
         private RateLimitConfig config;
         private Bucket minuteBucket;
@@ -111,7 +98,7 @@ public class InMemoryRateLimiter implements RateLimiter {
             this.minuteBucket = new Bucket(newConfig.perMinute(), 60.0, nowNanos);
             this.hourBucket = new Bucket(newConfig.perHour(), 3600.0, nowNanos);
             this.dayBucket = new Bucket(newConfig.perDay(), 86_400.0, nowNanos);
-            this.burstBucket = new Bucket(newConfig.burst(), 60.0, nowNanos);
+            this.burstBucket = new Bucket(newConfig.burst(), 1.0, nowNanos); // burst = per second
             this.lastAccessEpochSeconds = Instant.now().getEpochSecond();
         }
 
@@ -175,13 +162,16 @@ public class InMemoryRateLimiter implements RateLimiter {
         }
     }
 
+    /** Token bucket; a capacity {@code <= 0} means the window is unlimited. */
     private static class Bucket {
+        private final boolean unlimited;
         private final double capacity;
         private final double refillPerSecond;
         private double tokens;
         private long lastRefillNanos;
 
         private Bucket(int capacity, double windowSeconds, long nowNanos) {
+            this.unlimited = RateLimitConfig.isUnlimited(capacity);
             this.capacity = capacity;
             this.refillPerSecond = capacity / windowSeconds;
             this.tokens = capacity;
@@ -189,7 +179,7 @@ public class InMemoryRateLimiter implements RateLimiter {
         }
 
         private void refill(long nowNanos) {
-            if (nowNanos <= lastRefillNanos) {
+            if (unlimited || nowNanos <= lastRefillNanos) {
                 return;
             }
             double deltaSeconds = (nowNanos - lastRefillNanos) / 1_000_000_000.0;
@@ -199,21 +189,21 @@ public class InMemoryRateLimiter implements RateLimiter {
         }
 
         private boolean hasToken() {
-            return tokens >= 1.0;
+            return unlimited || tokens >= 1.0;
         }
 
         private void consume() {
-            if (tokens >= 1.0) {
+            if (!unlimited && tokens >= 1.0) {
                 tokens -= 1.0;
             }
         }
 
         private double tokens() {
-            return tokens;
+            return unlimited ? Double.POSITIVE_INFINITY : tokens;
         }
 
         private double timeToTokens(double target) {
-            if (tokens >= target) {
+            if (unlimited || tokens >= target) {
                 return 0.0;
             }
             if (refillPerSecond <= 0) {

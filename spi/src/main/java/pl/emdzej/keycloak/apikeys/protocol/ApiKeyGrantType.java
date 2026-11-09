@@ -79,6 +79,7 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
 
         if (apiKeyValue == null || apiKeyValue.isBlank()) {
             recordExchange(metrics, clientIdParam, "invalid", startNanos);
+            event.detail(Details.REASON, "api_key_missing");
             throw invalidGrant("Invalid API key");
         }
 
@@ -87,10 +88,12 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         ApiKeyEntity apiKey = apiKeyService.findByKeyValue(apiKeyValue);
         if (apiKey == null) {
             recordExchange(metrics, clientIdParam, "invalid", startNanos);
+            event.detail(Details.REASON, "api_key_not_found");
             throw invalidGrant("Invalid API key");
         }
         if (!Objects.equals(apiKey.getRealmId(), realm.getId())) {
             recordExchange(metrics, clientIdParam, "invalid", startNanos);
+            event.detail(Details.REASON, "realm_mismatch");
             throw invalidGrant("Invalid API key");
         }
         if (apiKey.getRevokedAt() != null) {
@@ -126,6 +129,7 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
         UserModel user = session.users().getUserById(realm, apiKey.getUserId());
         if (user == null) {
             recordExchange(metrics, apiKey.getClientId(), "invalid", startNanos);
+            event.detail(Details.REASON, "user_not_found");
             throw invalidGrant("Invalid API key or unauthorized");
         }
         if (!user.isEnabled()) {
@@ -184,6 +188,7 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
                 "retry_after", retryAfter
             );
             Response.ResponseBuilder builder = Response.status(429)
+                .header("Retry-After", retryAfter)
                 .entity(error)
                 .type(MediaType.APPLICATION_JSON_TYPE);
             addRateLimitHeaders(builder, info);
@@ -317,15 +322,27 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
     }
 
     protected CorsErrorResponseException invalidGrant(String message) {
-        event.detail(Details.REASON, message);
+        setReasonIfAbsent(message);
         event.error(Errors.INVALID_TOKEN);
         return new CorsErrorResponseException(cors, OAuthErrorException.INVALID_GRANT, message, Response.Status.BAD_REQUEST);
     }
 
     protected CorsErrorResponseException invalidClient(String message) {
-        event.detail(Details.REASON, message);
+        setReasonIfAbsent(message);
         event.error(Errors.INVALID_CLIENT);
         return new CorsErrorResponseException(cors, OAuthErrorException.INVALID_CLIENT, message, Response.Status.UNAUTHORIZED);
+    }
+
+    /**
+     * Keeps the specific reason recorded at the rejection site (e.g. {@code api_key_revoked})
+     * instead of overwriting it with the generic, client-facing message.
+     */
+    private void setReasonIfAbsent(String fallback) {
+        org.keycloak.events.Event current = event.getEvent();
+        Map<String, String> details = current != null ? current.getDetails() : null;
+        if (details == null || !details.containsKey(Details.REASON)) {
+            event.detail(Details.REASON, fallback);
+        }
     }
 
     private void addRateLimitHeaders(Response.ResponseBuilder builder, RateLimitInfo info) {

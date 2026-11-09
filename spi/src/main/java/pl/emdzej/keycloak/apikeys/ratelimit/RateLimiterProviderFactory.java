@@ -24,9 +24,15 @@ import org.keycloak.provider.ProviderFactory;
 public class RateLimiterProviderFactory implements ProviderFactory<RateLimiterProvider> {
     public static final String ID = "default";
 
+    /**
+     * Per-node fallback used when Infinispan is unavailable. Providers are created per
+     * session, so the limiter must live here or its counters would reset on every request.
+     */
+    private final InMemoryRateLimiter inMemoryFallback = new InMemoryRateLimiter();
+
     @Override
     public RateLimiterProvider create(KeycloakSession session) {
-        return new DefaultRateLimiterProvider(session);
+        return new DefaultRateLimiterProvider(session, inMemoryFallback);
     }
 
     @Override

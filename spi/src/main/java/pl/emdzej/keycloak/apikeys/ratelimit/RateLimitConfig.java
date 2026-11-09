@@ -27,6 +27,26 @@ public record RateLimitConfig(
     public static final int DEFAULT_PER_DAY = 10000;
     public static final int DEFAULT_BURST = 10;
 
+    /**
+     * Normalizes a resolved config for enforcement: {@code null} means defaults, and a
+     * value {@code <= 0} disables that window (stored as {@code 0}).
+     */
+    public static RateLimitConfig normalize(RateLimitConfig config) {
+        if (config == null) {
+            return defaults();
+        }
+        return new RateLimitConfig(
+            Math.max(config.perMinute(), 0),
+            Math.max(config.perHour(), 0),
+            Math.max(config.perDay(), 0),
+            Math.max(config.burst(), 0)
+        );
+    }
+
+    public static boolean isUnlimited(int limit) {
+        return limit <= 0;
+    }
+
     public static RateLimitConfig defaults() {
         return new RateLimitConfig(
             DEFAULT_PER_MINUTE,

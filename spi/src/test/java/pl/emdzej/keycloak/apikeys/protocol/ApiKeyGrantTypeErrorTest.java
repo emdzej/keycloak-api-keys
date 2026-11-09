@@ -162,4 +162,32 @@ class ApiKeyGrantTypeErrorTest {
     }
 
 
+
+    // ── event reasons ─────────────────────────────────────────────────────────
+
+    @Test
+    void specificEventReasonIsNotOverwrittenByGenericMessage() {
+        Cors cors = mock(Cors.class);
+        EventBuilder event = mock(EventBuilder.class);
+        org.keycloak.events.Event recorded = new org.keycloak.events.Event();
+        recorded.setDetails(new java.util.HashMap<>(java.util.Map.of(
+            org.keycloak.events.Details.REASON, "api_key_revoked")));
+        org.mockito.Mockito.when(event.getEvent()).thenReturn(recorded);
+
+        new ExposedGrantType(cors, event).callInvalidGrant(GENERIC_ERROR);
+
+        org.mockito.Mockito.verify(event, org.mockito.Mockito.never())
+            .detail(org.keycloak.events.Details.REASON, GENERIC_ERROR);
+    }
+
+    @Test
+    void genericReasonIsRecordedWhenNoSpecificReasonWasSet() {
+        Cors cors = mock(Cors.class);
+        EventBuilder event = mock(EventBuilder.class);
+        org.mockito.Mockito.when(event.getEvent()).thenReturn(new org.keycloak.events.Event());
+
+        new ExposedGrantType(cors, event).callInvalidClient(GENERIC_ERROR);
+
+        org.mockito.Mockito.verify(event).detail(org.keycloak.events.Details.REASON, GENERIC_ERROR);
+    }
 }
