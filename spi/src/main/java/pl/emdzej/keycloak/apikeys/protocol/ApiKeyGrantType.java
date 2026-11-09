@@ -308,13 +308,10 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
     }
 
     /**
-     * Required (abstract) in {@code OAuth2GrantType} since Keycloak 26.6.4; without it the token endpoint
-     * fails with {@code AbstractMethodError}. Deliberately not annotated with {@code @Override} so the SPI
-     * still compiles against, and runs on, older Keycloak versions where the method does not exist.
-     *
-     * <p>The {@code api_key} parameter is a short, bounded opaque value (not a JWT or assertion),
+     * The {@code api_key} parameter is a short, bounded opaque value (not a JWT or assertion),
      * so it should be subject to the regular parameter length limit rather than the larger token limit.
      */
+    @Override
     public Set<String> getTokenParameterNames() {
         return Collections.emptySet();
     }

@@ -95,7 +95,7 @@ class ApiKeyServiceQuotaTest {
         // Scope/role stubs (empty = no restrictions)
         when(client.getClientScopes(true)).thenReturn(Map.of());
         when(client.getClientScopes(false)).thenReturn(Map.of());
-        when(client.getDynamicClientScope(any())).thenReturn(null);
+        when(client.getParameterizedClientScope(any())).thenReturn(null);
 
         // Saved entity stub
         ApiKeyEntity savedEntity = new ApiKeyEntity(

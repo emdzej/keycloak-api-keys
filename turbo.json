@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "spi/src/main/resources/theme/**"]
+      "outputs": ["dist/**", "$TURBO_ROOT$/spi/src/main/resources/theme/**"]
     },
     "dev": {
       "cache": false,

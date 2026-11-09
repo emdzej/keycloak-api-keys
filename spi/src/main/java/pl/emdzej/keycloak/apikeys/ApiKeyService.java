@@ -406,7 +406,7 @@ public class ApiKeyService {
         return scopes.stream()
             .filter(scope -> scope != null && !scope.isBlank())
             .peek(scope -> {
-                if (!allowedScopes.contains(scope) && client.getDynamicClientScope(scope) == null) {
+                if (!allowedScopes.contains(scope) && client.getParameterizedClientScope(scope) == null) {
                     throw new BadRequestException("Scope not allowed for client: " + scope);
                 }
             })

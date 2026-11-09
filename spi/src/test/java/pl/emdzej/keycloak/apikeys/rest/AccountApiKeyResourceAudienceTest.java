@@ -64,7 +64,7 @@ class AccountApiKeyResourceAudienceTest {
                 throw new NotAuthorizedException("Bearer");
             }
             // Reproduce what the real authenticateBearer does after getting auth:
-            if (!bearerResult.getToken().hasAudience("account")) {
+            if (!bearerResult.token().hasAudience("account")) {
                 throw new ForbiddenException("Token missing required audience: account");
             }
             return bearerResult;
@@ -75,7 +75,7 @@ class AccountApiKeyResourceAudienceTest {
             if (bearerResult == null) {
                 throw new NotAuthorizedException("Bearer");
             }
-            if (!bearerResult.getToken().hasAudience("account")) {
+            if (!bearerResult.token().hasAudience("account")) {
                 throw new ForbiddenException("Token missing required audience: account");
             }
             return bearerResult;
@@ -105,7 +105,7 @@ class AccountApiKeyResourceAudienceTest {
             token.addAudience(aud);
         }
         AuthResult auth = mock(AuthResult.class);
-        when(auth.getToken()).thenReturn(token);
+        when(auth.token()).thenReturn(token);
         UserModel user = mock(UserModel.class);
         when(auth.user()).thenReturn(user);
         when(user.getId()).thenReturn("user-1");

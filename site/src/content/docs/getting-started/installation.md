@@ -7,8 +7,8 @@ description: How to install the Keycloak API Keys SPI extension.
 
 ## Requirements
 
-- Keycloak 24.0 or later
-- Java 17 or later (for building from source)
+- Keycloak 26.7 or later (tested with 26.8.2)
+- Java 21 or later (for building from source)
 
 ## Option 1: Download JAR
 
@@ -47,7 +47,7 @@ services:
 Or extend the official Keycloak image:
 
 ```dockerfile
-FROM quay.io/keycloak/keycloak:24.0
+FROM quay.io/keycloak/keycloak:26.8.2
 
 COPY --from=ghcr.io/emdzej/keycloak-api-keys:latest \
   /opt/keycloak/providers/keycloak-api-keys-spi.jar \

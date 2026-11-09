@@ -10,9 +10,16 @@ java {
     }
 }
 
-val keycloakVersion = "26.5.2"
-val testcontainersKeycloakVersion = "4.1.1"
-val infinispanVersion = "15.2.0.Final"
+// Override with -PkeycloakVersion=999.0.0-SNAPSHOT to check against a locally built Keycloak (mvn install).
+val keycloakVersion = providers.gradleProperty("keycloakVersion").getOrElse("26.8.2")
+val testcontainersKeycloakVersion = "4.4.0"
+val infinispanVersion = "16.0.15"
+
+if (keycloakVersion.endsWith("-SNAPSHOT")) {
+    repositories {
+        mavenLocal()
+    }
+}
 
 dependencies {
     compileOnly("org.keycloak:keycloak-core:$keycloakVersion")
@@ -22,23 +29,21 @@ dependencies {
     compileOnly("org.keycloak:keycloak-model-jpa:$keycloakVersion")
     compileOnly("org.keycloak:keycloak-model-infinispan:$keycloakVersion")
     compileOnly("org.infinispan:infinispan-core:$infinispanVersion")
-    compileOnly("io.micrometer:micrometer-core:1.14.0")
-    compileOnly("jakarta.persistence:jakarta.persistence-api:3.1.0")
-    compileOnly("org.projectlombok:lombok:1.18.32")
-    annotationProcessor("org.projectlombok:lombok:1.18.32")
+    compileOnly("io.micrometer:micrometer-core:1.17.1")
+    compileOnly("jakarta.persistence:jakarta.persistence-api:3.2.0")
+    compileOnly("org.projectlombok:lombok:1.18.48")
+    annotationProcessor("org.projectlombok:lombok:1.18.48")
 
-    implementation("com.google.guava:guava:33.0.0-jre")
-
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.mockito:mockito-core:5.24.0")
     testImplementation("org.keycloak:keycloak-core:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-server-spi:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-server-spi-private:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-services:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-model-jpa:$keycloakVersion")
     testImplementation("org.keycloak:keycloak-model-infinispan:$keycloakVersion")
-    testImplementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
+    testImplementation("jakarta.persistence:jakarta.persistence-api:3.2.0")
     testImplementation("com.github.dasniko:testcontainers-keycloak:$testcontainersKeycloakVersion")
 }
 
@@ -62,7 +67,7 @@ tasks.javadoc {
 }
 
 mavenPublishing {
-    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+    publishToMavenCentral(automaticRelease = true)
     signAllPublications()
 
     coordinates("pl.emdzej.keycloak", "keycloak-api-keys-spi", version.toString())

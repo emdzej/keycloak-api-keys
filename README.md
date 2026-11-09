@@ -41,7 +41,7 @@ This project extends Keycloak with API key capabilities, allowing users to gener
 
 ### Prerequisites
 - Java 21
-- Node.js 22+
+- Node.js 24 LTS (or 22.23.4+; required by Astro 7 for the docs site)
 - pnpm
 - .NET 10 SDK
 - Docker & Docker Compose

@@ -21,7 +21,9 @@ import org.keycloak.connections.jpa.entityprovider.JpaEntityProvider;
 
 public class ApiKeyJpaEntityProvider implements JpaEntityProvider {
 
+    // Ignored by Keycloak on Quarkus (entities are discovered at build time) but still abstract in the SPI.
     @Override
+    @SuppressWarnings("removal")
     public List<Class<?>> getEntities() {
         return List.of(ApiKeyEntity.class);
     }

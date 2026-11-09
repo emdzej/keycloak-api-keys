@@ -125,7 +125,7 @@ public class AccountApiKeyResource {
      * that happen to be valid in the realm must not be usable to manage API keys (H1).
      */
     private static void requireAccountAudience(AuthResult auth) {
-        if (!auth.getToken().hasAudience("account")) {
+        if (!auth.token().hasAudience("account")) {
             throw new ForbiddenException("Token missing required audience: account");
         }
     }

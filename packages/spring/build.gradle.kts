@@ -3,25 +3,25 @@ plugins {
     id("com.vanniktech.maven.publish")
 }
 
-val springBootVersion = "4.0.3"
+val springBootVersion = "4.1.2"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security:$springBootVersion")
     implementation("org.springframework.boot:spring-boot-starter-web:$springBootVersion")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.21.7")
 
-    compileOnly("org.projectlombok:lombok:1.18.38")
-    annotationProcessor("org.projectlombok:lombok:1.18.38")
+    compileOnly("org.projectlombok:lombok:1.18.48")
+    annotationProcessor("org.projectlombok:lombok:1.18.48")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test:$springBootVersion")
-    testImplementation("org.springframework.security:spring-security-test:6.5.0")
+    testImplementation("org.springframework.security:spring-security-test:7.1.2")
 }
 
 java {
 }
 
 mavenPublishing {
-    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+    publishToMavenCentral(automaticRelease = true)
     signAllPublications()
 
     coordinates("pl.emdzej.keycloak", "keycloak-api-keys-spring", version.toString())

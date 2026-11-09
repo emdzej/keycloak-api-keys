@@ -43,7 +43,7 @@ export default defineConfig({
 				},
 				{
 					label: 'API Reference',
-					autogenerate: { directory: 'api' },
+					items: [{ autogenerate: { directory: 'api' } }],
 				},
 			],
 		}),

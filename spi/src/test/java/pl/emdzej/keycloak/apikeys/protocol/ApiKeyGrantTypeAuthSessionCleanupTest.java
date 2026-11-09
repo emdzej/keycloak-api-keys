@@ -82,7 +82,7 @@ class ApiKeyGrantTypeAuthSessionCleanupTest {
         when(session.authenticationSessions()).thenReturn(authSessions);
         when(rootSession.getId()).thenReturn("failing-session-id");
         doThrow(new RuntimeException("session store unavailable"))
-            .when(authSessions).removeRootAuthenticationSession(any(), any());
+            .when(authSessions).removeRootAuthenticationSession(any(RealmModel.class), any(RootAuthenticationSessionModel.class));
 
         TestableGrantType grantType = new TestableGrantType();
 

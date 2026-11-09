@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@emdzej/keycloak-api-keys-hono": "workspace:*",
-    "hono": "^4.0.0",
-    "@hono/node-server": "^1.0.0"
+    "hono": "^4.13.17",
+    "@hono/node-server": "^2.1.6"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3"
   }
 }

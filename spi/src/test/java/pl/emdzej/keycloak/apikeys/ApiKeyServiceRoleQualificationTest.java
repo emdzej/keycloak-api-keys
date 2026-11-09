@@ -77,7 +77,7 @@ class ApiKeyServiceRoleQualificationTest {
         when(client.isPublicClient()).thenReturn(true);
         when(client.getClientScopes(true)).thenReturn(Map.of());
         when(client.getClientScopes(false)).thenReturn(Map.of());
-        when(client.getDynamicClientScope(any())).thenReturn(null);
+        when(client.getParameterizedClientScope(any())).thenReturn(null);
 
         KeycloakContext ctx = mock(KeycloakContext.class);
         when(session.getContext()).thenReturn(ctx);
