@@ -20,8 +20,10 @@ import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OAuthErrorException;
@@ -303,6 +305,18 @@ public class ApiKeyGrantType extends org.keycloak.protocol.oidc.grants.OAuth2Gra
     @Override
     public EventType getEventType() {
         return EventType.OAUTH2_EXTENSION_GRANT;
+    }
+
+    /**
+     * Required (abstract) in {@code OAuth2GrantType} since Keycloak 26.6.4; without it the token endpoint
+     * fails with {@code AbstractMethodError}. Deliberately not annotated with {@code @Override} so the SPI
+     * still compiles against, and runs on, older Keycloak versions where the method does not exist.
+     *
+     * <p>The {@code api_key} parameter is a short, bounded opaque value (not a JWT or assertion),
+     * so it should be subject to the regular parameter length limit rather than the larger token limit.
+     */
+    public Set<String> getTokenParameterNames() {
+        return Collections.emptySet();
     }
 
     protected CorsErrorResponseException invalidGrant(String message) {
